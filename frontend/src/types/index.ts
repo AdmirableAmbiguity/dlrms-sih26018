@@ -2,7 +2,9 @@ export type Role = 'citizen' | 'revenue_officer' | 'verifier_admin';
 
 export interface User {
   id: string;
-  phone: string;
+  phone?: string;
+  email?: string;
+  full_name?: string;
   role: Role;
   name?: string;
 }
