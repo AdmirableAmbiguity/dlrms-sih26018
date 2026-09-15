@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:15-3.3-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dlrms}
+      POSTGRES_USER: ${POSTGRES_USER:-dlrms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dlrms}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dlrms} -d ${POSTGRES_DB:-dlrms}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dlrms-network
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    networks:
+      - dlrms-network
+
+  hardhat-node:
+    build:
+      context: ./blockchain
+      dockerfile: Dockerfile
+    ports:
+      - "8545:8545"
+    networks:
+      - dlrms-network
+    volumes:
+      - ./blockchain/artifacts:/app/artifacts
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      hardhat-node:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://dlrms:dlrms@postgres:5432/dlrms}
+      - SYNC_DATABASE_URL=${SYNC_DATABASE_URL:-postgresql://dlrms:dlrms@postgres:5432/dlrms}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - dlrms-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    networks:
+      - dlrms-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+
+networks:
+  dlrms-network:
+    driver: bridge

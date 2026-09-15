@@ -1,0 +1,212 @@
+[
+  {
+    "filename": "clear_record_0.png",
+    "path": "clear/clear_record_0.png",
+    "expected_outcome": "auto_accepted",
+    "description": "Clear land record",
+    "language": "en/hi"
+  },
+  {
+    "filename": "clear_record_1.png",
+    "path": "clear/clear_record_1.png",
+    "expected_outcome": "auto_accepted",
+    "description": "Clear land record",
+    "language": "en/hi"
+  },
+  {
+    "filename": "clear_record_2.png",
+    "path": "clear/clear_record_2.png",
+    "expected_outcome": "auto_accepted",
+    "description": "Clear land record",
+    "language": "en/hi"
+  },
+  {
+    "filename": "clear_record_3.png",
+    "path": "clear/clear_record_3.png",
+    "expected_outcome": "auto_accepted",
+    "description": "Clear land record",
+    "language": "en/hi"
+  },
+  {
+    "filename": "clear_record_4.png",
+    "path": "clear/clear_record_4.png",
+    "expected_outcome": "auto_accepted",
+    "description": "Clear land record",
+    "language": "en/hi"
+  },
+  {
+    "filename": "clear_record_5.png",
+    "path": "clear/clear_record_5.png",
+    "expected_outcome": "auto_accepted",
+    "description": "Clear land record",
+    "language": "en/hi"
+  },
+  {
+    "filename": "clear_record_6.png",
+    "path": "clear/clear_record_6.png",
+    "expected_outcome": "auto_accepted",
+    "description": "Clear land record",
+    "language": "en/hi"
+  },
+  {
+    "filename": "clear_record_7.png",
+    "path": "clear/clear_record_7.png",
+    "expected_outcome": "auto_accepted",
+    "description": "Clear land record",
+    "language": "en/hi"
+  },
+  {
+    "filename": "clear_record_8.png",
+    "path": "clear/clear_record_8.png",
+    "expected_outcome": "auto_accepted",
+    "description": "Clear land record",
+    "language": "en/hi"
+  },
+  {
+    "filename": "clear_record_9.png",
+    "path": "clear/clear_record_9.png",
+    "expected_outcome": "auto_accepted",
+    "description": "Clear land record",
+    "language": "en/hi"
+  },
+  {
+    "filename": "degraded_record_0.png",
+    "path": "review/degraded_record_0.png",
+    "expected_outcome": "needs_review",
+    "description": "Degraded land record (blur)",
+    "language": "en/hi"
+  },
+  {
+    "filename": "degraded_record_1.png",
+    "path": "review/degraded_record_1.png",
+    "expected_outcome": "needs_review",
+    "description": "Degraded land record (rotate)",
+    "language": "en/hi"
+  },
+  {
+    "filename": "degraded_record_2.png",
+    "path": "review/degraded_record_2.png",
+    "expected_outcome": "needs_review",
+    "description": "Degraded land record (contrast)",
+    "language": "en/hi"
+  },
+  {
+    "filename": "degraded_record_3.png",
+    "path": "review/degraded_record_3.png",
+    "expected_outcome": "needs_review",
+    "description": "Degraded land record (blur)",
+    "language": "en/hi"
+  },
+  {
+    "filename": "degraded_record_4.png",
+    "path": "review/degraded_record_4.png",
+    "expected_outcome": "needs_review",
+    "description": "Degraded land record (rotate)",
+    "language": "en/hi"
+  },
+  {
+    "filename": "degraded_record_5.png",
+    "path": "review/degraded_record_5.png",
+    "expected_outcome": "needs_review",
+    "description": "Degraded land record (contrast)",
+    "language": "en/hi"
+  },
+  {
+    "filename": "degraded_record_6.png",
+    "path": "review/degraded_record_6.png",
+    "expected_outcome": "needs_review",
+    "description": "Degraded land record (blur)",
+    "language": "en/hi"
+  },
+  {
+    "filename": "degraded_record_7.png",
+    "path": "review/degraded_record_7.png",
+    "expected_outcome": "needs_review",
+    "description": "Degraded land record (rotate)",
+    "language": "en/hi"
+  },
+  {
+    "filename": "degraded_record_8.png",
+    "path": "review/degraded_record_8.png",
+    "expected_outcome": "needs_review",
+    "description": "Degraded land record (contrast)",
+    "language": "en/hi"
+  },
+  {
+    "filename": "degraded_record_9.png",
+    "path": "review/degraded_record_9.png",
+    "expected_outcome": "needs_review",
+    "description": "Degraded land record (blur)",
+    "language": "en/hi"
+  },
+  {
+    "filename": "wrong_doc_0.png",
+    "path": "rejected/wrong_doc_0.png",
+    "expected_outcome": "rejected",
+    "description": "Not a land record",
+    "language": "en"
+  },
+  {
+    "filename": "wrong_doc_1.png",
+    "path": "rejected/wrong_doc_1.png",
+    "expected_outcome": "rejected",
+    "description": "Not a land record",
+    "language": "en"
+  },
+  {
+    "filename": "wrong_doc_2.png",
+    "path": "rejected/wrong_doc_2.png",
+    "expected_outcome": "rejected",
+    "description": "Not a land record",
+    "language": "en"
+  },
+  {
+    "filename": "wrong_doc_3.png",
+    "path": "rejected/wrong_doc_3.png",
+    "expected_outcome": "rejected",
+    "description": "Not a land record",
+    "language": "en"
+  },
+  {
+    "filename": "wrong_doc_4.png",
+    "path": "rejected/wrong_doc_4.png",
+    "expected_outcome": "rejected",
+    "description": "Not a land record",
+    "language": "en"
+  },
+  {
+    "filename": "wrong_doc_5.png",
+    "path": "rejected/wrong_doc_5.png",
+    "expected_outcome": "rejected",
+    "description": "Not a land record",
+    "language": "en"
+  },
+  {
+    "filename": "wrong_doc_6.png",
+    "path": "rejected/wrong_doc_6.png",
+    "expected_outcome": "rejected",
+    "description": "Not a land record",
+    "language": "en"
+  },
+  {
+    "filename": "wrong_doc_7.png",
+    "path": "rejected/wrong_doc_7.png",
+    "expected_outcome": "rejected",
+    "description": "Not a land record",
+    "language": "en"
+  },
+  {
+    "filename": "wrong_doc_8.png",
+    "path": "rejected/wrong_doc_8.png",
+    "expected_outcome": "rejected",
+    "description": "Not a land record",
+    "language": "en"
+  },
+  {
+    "filename": "wrong_doc_9.png",
+    "path": "rejected/wrong_doc_9.png",
+    "expected_outcome": "rejected",
+    "description": "Not a land record",
+    "language": "en"
+  }
+]
