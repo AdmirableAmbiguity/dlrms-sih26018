@@ -1,0 +1,46 @@
+services:
+  # Backend Web Service
+  - type: web
+    name: dlrms-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile.render
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dlrms-db
+          property: connectionString
+      - key: SYNC_DATABASE_URL
+        fromDatabase:
+          name: dlrms-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: dlrms-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ENVIRONMENT
+        value: development
+      - key: BASE_URL
+        value: https://dlrms-api.onrender.com
+      - key: CORS_ORIGINS
+        value: '["https://dlrms-sih26018.vercel.app","http://localhost:3000"]'
+      - key: BLOCKCHAIN_RPC_URL
+        value: ""
+      - key: SARVAM_API_KEY
+        value: ""
+
+  # Redis instance
+  - type: redis
+    name: dlrms-redis
+    plan: free
+    maxmemoryPolicy: noeviction
+
+databases:
+  - name: dlrms-db
+    plan: free
+    databaseName: dlrms
+    postgresMajorVersion: 15

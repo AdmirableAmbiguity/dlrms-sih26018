@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps for psycopg2, pillow, reportlab
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    libffi-dev \
+    libssl-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cloud requirements (no heavy ML deps)
+COPY requirements-cloud.txt .
+RUN pip install --no-cache-dir -r requirements-cloud.txt
+
+# Download spaCy English model (small)
+RUN python -m spacy download en_core_web_sm
+
+COPY . .
+
+# Create uploads directory
+RUN mkdir -p uploads
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
