@@ -64,12 +64,20 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen: boolean, se
 
       <div className="p-4 border-t border-white/10">
         <div className="flex items-center gap-3 mb-4 px-2">
-          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold">
-            {user?.name?.[0] || 'U'}
-          </div>
+          {user?.picture || user?.avatar ? (
+            <img
+              src={user.picture || user.avatar}
+              alt={user.name || 'User'}
+              className="w-10 h-10 rounded-full border border-white/20 object-cover"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold">
+              {user?.name?.[0] || 'U'}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{user?.name || 'User'}</p>
-            <p className="text-xs text-gray-400 capitalize truncate">{user?.role.replace('_', ' ')}</p>
+            <p className="text-sm font-medium truncate">{user?.name || user?.full_name || 'User'}</p>
+            <p className="text-xs text-gray-400 capitalize truncate">{user?.role?.replace('_', ' ') || 'Citizen'}</p>
           </div>
         </div>
         <button

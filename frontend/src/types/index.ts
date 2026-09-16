@@ -7,6 +7,8 @@ export interface User {
   full_name?: string;
   role: Role;
   name?: string;
+  avatar?: string;
+  picture?: string;
 }
 
 export type ValidationStatus = 'pending' | 'needs_review' | 'approved' | 'rejected' | 'validated';
