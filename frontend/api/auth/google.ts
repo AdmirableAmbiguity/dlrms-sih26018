@@ -1,8 +1,6 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '810558816674-vj00b3e31bgrmo5p6sub7m52pi2cg2mp.apps.googleusercontent.com';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
