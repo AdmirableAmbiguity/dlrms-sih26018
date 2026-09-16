@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import {
   Shield, Smartphone, Loader2, Building2, CheckCircle2,
-  RefreshCw, Sparkles, ArrowRight, UserCheck
+  RefreshCw, UserCheck, AlertCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -13,16 +13,16 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   // Form State
-  const [phone, setPhone] = useState('9876543210');
+  const [phone, setPhone] = useState('');
   const [role, setRole] = useState<'citizen' | 'revenue_officer' | 'verifier_admin'>('revenue_officer');
   const [loading, setLoading] = useState(false);
 
   // OTP State
   const [otpSent, setOtpSent] = useState(false);
-  const [generatedOtp, setGeneratedOtp] = useState<string>('');
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [timer, setTimer] = useState(60);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  const [serverMessage, setServerMessage] = useState<string>('');
 
   const digitInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -37,8 +37,8 @@ export default function LoginPage() {
     return () => clearInterval(interval);
   }, [isTimerActive, timer]);
 
-  // Request & Send Real Dynamic OTP
-  const handleSendOTP = (e: React.FormEvent) => {
+  // Request Real SMS OTP from Backend
+  const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const cleanPhone = phone.replace(/\D/g, '');
@@ -49,59 +49,58 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    setTimeout(() => {
-      // Generate dynamic random 6-digit code
-      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      setGeneratedOtp(newOtp);
-      setOtpSent(true);
-      setTimer(60);
-      setIsTimerActive(true);
+    try {
+      // Try local FastAPI backend endpoint first or fallback to serverless route
+      let response: Response;
+      try {
+        response = await fetch('/api/v1/auth/otp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone_or_email: cleanPhone, phone: cleanPhone }),
+        });
+      } catch {
+        response = await fetch('/api/auth/otp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: cleanPhone }),
+        });
+      }
+
+      if (!response.ok && response.status === 404) {
+        response = await fetch('/api/auth/otp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: cleanPhone }),
+        });
+      }
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setOtpSent(true);
+        setTimer(60);
+        setIsTimerActive(true);
+        setOtpDigits(['', '', '', '', '', '']);
+        setServerMessage(data.message || `OTP dispatched via SMS to +91 ${cleanPhone.slice(-4).padStart(10, '*')}`);
+        toast.success(data.message || 'OTP sent successfully to your mobile phone!');
+
+        setTimeout(() => {
+          digitInputRefs.current[0]?.focus();
+        }, 150);
+      } else {
+        toast.error(data.detail || data.error || 'Failed to dispatch SMS. Please try again.');
+      }
+    } catch (err: any) {
+      toast.error('Network error requesting SMS OTP. Please check your connection.');
+    } finally {
       setLoading(false);
-      setOtpDigits(['', '', '', '', '', '']);
-
-      // Show real interactive SMS notification toast
-      toast.custom(
-        t => (
-          <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-slate-900 shadow-2xl rounded-2xl pointer-events-auto p-4 border border-emerald-500/40 text-white ring-2 ring-emerald-500/20`}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" /> SMS Gateway · DLRMS Auth
-                </p>
-                <p className="mt-1 text-xs text-slate-300">
-                  Your One-Time Login Code for <strong>+91 {cleanPhone}</strong>:
-                </p>
-                <p className="mt-1.5 text-3xl font-mono font-black text-emerald-400 tracking-widest">
-                  {newOtp}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setOtpDigits(newOtp.split(''));
-                  toast.dismiss(t.id);
-                  toast.success('OTP Auto-filled!');
-                }}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold rounded-lg transition-colors shadow"
-              >
-                Auto-Fill
-              </button>
-            </div>
-          </div>
-        ),
-        { duration: 20000 }
-      );
-
-      setTimeout(() => {
-        digitInputRefs.current[0]?.focus();
-      }, 100);
-    }, 800);
+    }
   };
 
-  // Handle single digit typing
+  // Handle single digit entry
   const handleDigitChange = (index: number, val: string) => {
     if (val.length > 1) {
-      // Paste handling
+      // Paste support
       const pasted = val.slice(0, 6).split('');
       const newDigits = [...otpDigits];
       pasted.forEach((char, i) => {
@@ -128,21 +127,60 @@ export default function LoginPage() {
     }
   };
 
-  // Verify OTP and Login
-  const handleVerifyOTP = (e: React.FormEvent) => {
+  // Verify Real SMS OTP with Backend
+  const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
-    const entered = otpDigits.join('');
+    const enteredOtp = otpDigits.join('');
 
-    if (entered.length !== 6) {
-      toast.error('Please enter the 6-digit OTP');
+    if (enteredOtp.length !== 6) {
+      toast.error('Please enter the complete 6-digit OTP received on your phone');
       return;
     }
 
     setLoading(true);
+    const cleanPhone = phone.replace(/\D/g, '');
 
-    setTimeout(() => {
-      // Matches dynamic OTP or valid 6 digits
-      if (entered === generatedOtp || entered.length === 6) {
+    try {
+      let response: Response;
+      try {
+        response = await fetch('/api/v1/auth/otp/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone_or_email: cleanPhone,
+            phone: cleanPhone,
+            otp: enteredOtp,
+            role: role,
+          }),
+        });
+      } catch {
+        response = await fetch('/api/auth/otp/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: cleanPhone,
+            otp: enteredOtp,
+            role: role,
+          }),
+        });
+      }
+
+      if (!response.ok && response.status === 404) {
+        response = await fetch('/api/auth/otp/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: cleanPhone,
+            otp: enteredOtp,
+            role: role,
+          }),
+        });
+      }
+
+      const data = await response.json();
+
+      if (response.ok && (data.access_token || data.token || data.status === 'success')) {
+        const token = data.access_token || data.token;
         const userName =
           role === 'citizen'
             ? 'Ramesh Chandra Gupta'
@@ -152,33 +190,26 @@ export default function LoginPage() {
 
         login(
           {
-            id: role === 'citizen' ? '1' : role === 'revenue_officer' ? '2' : '3',
-            email: `${role}@dlrms.gov.in`,
-            full_name: userName,
-            phone: phone,
+            id: String(data.user_id || '1'),
+            email: `${cleanPhone}@dlrms.gov.in`,
+            full_name: data.user?.name || userName,
+            phone: cleanPhone,
             role: role,
-            name: userName,
+            name: data.user?.name || userName,
           },
-          'jwt-token-' + Math.random().toString(36).substring(2)
+          token
         );
 
-        toast.success(`Signed in successfully as ${userName}!`);
-        setLoading(false);
+        toast.success(`OTP Verified! Signed in as ${userName}`);
         navigate('/dashboard');
       } else {
-        toast.error('Incorrect OTP. Please check the code.');
-        setLoading(false);
+        toast.error(data.detail || data.error || 'Invalid OTP code. Please check your SMS.');
       }
-    }, 700);
-  };
-
-  // 1-Click Fast Profile Switcher for Judges
-  const selectQuickRole = (r: 'citizen' | 'revenue_officer' | 'verifier_admin', p: string) => {
-    setRole(r);
-    setPhone(p);
-    setOtpSent(false);
-    setOtpDigits(['', '', '', '', '', '']);
-    toast.success(`Selected ${r.replace('_', ' ').toUpperCase()}`);
+    } catch (err: any) {
+      toast.error('Verification failed. Please check network connection.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -214,7 +245,7 @@ export default function LoginPage() {
               '3D Subdivided Apartment Flats',
               'Unique ULPIN & XYZ Coords',
               'Wiener & Otsu Deconvolution',
-              'Phone Number OTP Login',
+              'Real SMS OTP Gateway',
             ].map(f => (
               <div key={f} className="bg-white/10 backdrop-blur-sm rounded-lg px-3.5 py-2.5 text-xs font-medium border border-white/10 flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#FF9933]" />
@@ -236,7 +267,7 @@ export default function LoginPage() {
         <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-[#FF9933] opacity-10 rounded-full blur-3xl" />
       </div>
 
-      {/* Right Login / OTP Authentication Form */}
+      {/* Right Login / OTP Form */}
       <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 lg:px-16 xl:px-24 py-8">
         <div className="mx-auto w-full max-w-md">
           <motion.div
@@ -248,39 +279,12 @@ export default function LoginPage() {
             <div className="mb-6">
               <h2 className="text-2xl font-extrabold text-slate-900">Mobile OTP Authentication</h2>
               <p className="text-xs text-slate-500 mt-1">
-                Enter your 10-digit mobile number to receive an authentic OTP code
+                Enter your 10-digit mobile number to receive a secure SMS OTP
               </p>
             </div>
 
-            {/* Quick Demo Role Selector for SIH Evaluators */}
-            <div className="mb-6 p-3 bg-blue-50/70 border border-blue-200 rounded-xl">
-              <div className="text-[10px] font-bold text-blue-900 uppercase tracking-wider mb-2 flex items-center justify-between">
-                <span>⚡ Quick Test Roles for SIH Judges:</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { r: 'citizen' as const, label: '🏠 Citizen', num: '9876543210' },
-                  { r: 'revenue_officer' as const, label: '📋 Patwari', num: '9811223344' },
-                  { r: 'verifier_admin' as const, label: '🔐 Tehsildar', num: '9899001122' },
-                ].map(item => (
-                  <button
-                    key={item.r}
-                    type="button"
-                    onClick={() => selectQuickRole(item.r, item.num)}
-                    className={`py-2 px-2 rounded-lg text-xs font-semibold border transition-all ${
-                      role === item.r
-                        ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {!otpSent ? (
-              /* Step 1: Enter Phone Number */
+              /* Step 1: Phone Number Input */
               <form onSubmit={handleSendOTP} className="space-y-4">
                 {/* Role Selector */}
                 <div>
@@ -298,7 +302,7 @@ export default function LoginPage() {
 
                 {/* Mobile Number */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mobile Number</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mobile Phone Number</label>
                   <div className="relative flex">
                     <span className="inline-flex items-center px-3.5 text-xs text-slate-600 bg-slate-100 border border-r-0 border-slate-300 rounded-l-lg font-bold">
                       +91
@@ -309,47 +313,50 @@ export default function LoginPage() {
                       maxLength={10}
                       value={phone}
                       onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
-                      placeholder="10-digit mobile number"
+                      placeholder="Enter 10-digit mobile number"
                       className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-r-lg focus:ring-2 focus:ring-[#1e3a5f] outline-none font-medium tracking-wide"
                     />
                   </div>
+                  <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+                    <Shield className="w-3 h-3 text-emerald-600" /> Real SMS will be delivered to this number
+                  </p>
                 </div>
 
                 {/* Send OTP Button */}
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full mt-2 py-3 px-4 bg-[#1e3a5f] hover:bg-[#2a4f7c] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 active:scale-[0.98]"
+                  className="w-full mt-3 py-3 px-4 bg-[#1e3a5f] hover:bg-[#2a4f7c] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 active:scale-[0.98]"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Smartphone className="w-4 h-4" />}
-                  Send 6-Digit OTP Code →
+                  Send Real SMS OTP →
                 </button>
               </form>
             ) : (
-              /* Step 2: Enter 6-Digit OTP */
+              /* Step 2: Real OTP Verification */
               <form onSubmit={handleVerifyOTP} className="space-y-5">
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-900">
                   <div className="font-bold flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" /> OTP Dispatched
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" /> SMS Dispatched
                     </span>
                     <button
                       type="button"
                       onClick={() => setOtpSent(false)}
                       className="text-emerald-700 underline text-[11px]"
                     >
-                      Change Phone
+                      Change Number
                     </button>
                   </div>
                   <p className="text-[11px] text-emerald-700 mt-1">
-                    Enter the code sent to <strong>+91 {phone}</strong>
+                    {serverMessage || `Enter the 6-digit OTP received on +91 ${phone}`}
                   </p>
                 </div>
 
-                {/* 6 Individual Digit Inputs */}
+                {/* 6 Digit Inputs */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-2 text-center">
-                    Enter 6-Digit One-Time Password
+                    Enter 6-Digit OTP Received via SMS
                   </label>
                   <div className="flex justify-between gap-2">
                     {otpDigits.map((digit, idx) => (
@@ -365,27 +372,12 @@ export default function LoginPage() {
                       />
                     ))}
                   </div>
-
-                  {generatedOtp && (
-                    <div className="mt-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOtpDigits(generatedOtp.split(''));
-                          toast.success('Auto-filled OTP code!');
-                        }}
-                        className="text-[11px] text-[#1e3a5f] font-semibold hover:underline"
-                      >
-                        ⚡ Auto-fill code: <strong>{generatedOtp}</strong>
-                      </button>
-                    </div>
-                  )}
                 </div>
 
-                {/* Resend Countdown */}
+                {/* Cooldown Timer & Resend Button */}
                 <div className="text-center text-xs text-slate-500">
                   {isTimerActive ? (
-                    <span>Resend OTP in <strong>{timer}s</strong></span>
+                    <span>Resend OTP code in <strong>{timer}s</strong></span>
                   ) : (
                     <button
                       type="button"
@@ -404,14 +396,14 @@ export default function LoginPage() {
                   className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-[0.98]"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
-                  Verify &amp; Sign In →
+                  Verify OTP &amp; Login →
                 </button>
               </form>
             )}
 
             {/* Footer */}
             <div className="mt-8 text-center text-[11px] text-slate-400">
-              🔒 Verified by National Land Record Modernization Gateway · Govt of Uttar Pradesh
+              🔒 National Land Record Modernization Authentication Gateway · Govt of Uttar Pradesh
             </div>
           </motion.div>
         </div>

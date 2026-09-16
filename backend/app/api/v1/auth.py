@@ -51,20 +51,35 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/otp/send")
 async def send_otp(req: OTPRequest):
-    otp = await mock_generate_otp(redis_client, req.phone_or_email)
-    return {"message": f"OTP sent (mock: {otp})"}
+    from app.services.sms.sms_service import send_real_sms_otp
+    success, message = await send_real_sms_otp(req.phone_or_email)
+    if not success:
+        raise HTTPException(status_code=400, detail=message)
+    return {"status": "success", "message": message}
 
 @router.post("/otp/verify", response_model=TokenResponse)
 async def verify_otp(req: OTPVerifyRequest, db: AsyncSession = Depends(get_db)):
-    is_valid = await mock_verify_otp(redis_client, req.phone_or_email, req.otp)
+    from app.services.sms.sms_service import verify_real_sms_otp
+    is_valid, err_msg = await verify_real_sms_otp(req.phone_or_email, req.otp)
     if not is_valid:
-        raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+        raise HTTPException(status_code=400, detail=err_msg)
         
-    result = await db.execute(select(User).where(User.email == req.phone_or_email))
+    # Find or auto-register user for authenticated phone
+    result = await db.execute(select(User).where((User.email == req.phone_or_email) | (User.aadhaar_number == req.phone_or_email)))
     user = result.scalars().first()
     
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        # Create user record for verified mobile number
+        user = User(
+            email=f"{req.phone_or_email}@dlrms.gov.in",
+            full_name=f"Verified Citizen ({req.phone_or_email[-4:]})",
+            hashed_password=hash_password("oauth2_verified_session"),
+            role="citizen",
+            aadhaar_number=req.phone_or_email
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
         
     access_token = create_access_token(subject=user.id)
     return {
@@ -73,6 +88,7 @@ async def verify_otp(req: OTPVerifyRequest, db: AsyncSession = Depends(get_db)):
         "user_id": user.id,
         "role": user.role
     }
+
 
 @router.get("/me", response_model=UserOut)
 async def read_users_me(current_user: User = Depends(get_current_user)):

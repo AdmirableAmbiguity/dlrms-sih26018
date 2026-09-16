@@ -17,8 +17,16 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "supersecretkey_change_in_production_1234567890"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
     
-    # API Keys
+    # API Keys & SMS Gateway Configuration
     SARVAM_API_KEY: str = "sk_gae8vqjb_z3gXU0eToDYfK2iOsr8ErgN9"
+    SMS_PROVIDER: str = "twilio_verify"  # "twilio_verify" | "twilio_sms" | "msg91" | "fast2sms"
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_VERIFY_SERVICE_SID: str = ""
+    TWILIO_PHONE_NUMBER: str = ""
+    MSG91_AUTH_KEY: str = ""
+    MSG91_TEMPLATE_ID: str = ""
+    FAST2SMS_API_KEY: str = ""
     
     # Blockchain
     BLOCKCHAIN_RPC_URL: str = "http://localhost:8545"
