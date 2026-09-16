@@ -1,6 +1,6 @@
 // Vercel Serverless Function: Real SMS OTP Dispatch
 // Supports: Twilio Verify, Twilio SMS, Fast2SMS, MSG91
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+
 
 // Shared in-memory / cache store on serverless runtime
 declare global {
@@ -21,7 +21,7 @@ function normalizePhone(phone: string): string {
   return `+91${digits.slice(-10)}`;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');

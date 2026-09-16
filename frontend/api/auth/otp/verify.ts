@@ -1,6 +1,6 @@
 // Vercel Serverless Function: Real SMS OTP Verification
 // Verifies entered OTP against Twilio Verify or Serverless Store
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+
 
 declare global {
   var __SERVER_OTP_STORE: Record<string, { otp: string; provider: string; createdAt: number; expiresAt: number; attempts: number }> | undefined;
@@ -20,7 +20,7 @@ function normalizePhone(phone: string): string {
   return `+91${digits.slice(-10)}`;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
