@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
     
     # API Keys
-    SARVAM_API_KEY: str = ""
+    SARVAM_API_KEY: str = "sk_gae8vqjb_z3gXU0eToDYfK2iOsr8ErgN9"
     
     # Blockchain
     BLOCKCHAIN_RPC_URL: str = "http://localhost:8545"
