@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Camera, RefreshCw, CheckCircle, AlertCircle, Scan, Maximize2, Sparkles, X } from 'lucide-react';
+import { Camera, RefreshCw, CheckCircle, AlertCircle, Sparkles, X, Image as ImageIcon, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface LiveCameraCaptureProps {
@@ -10,16 +10,15 @@ interface LiveCameraCaptureProps {
 export function LiveCameraCapture({ onCapture, onCancel }: LiveCameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [capturedDataUrl, setCapturedDataUrl] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(true);
-  const [deviceList, setDeviceList] = useState<MediaDeviceInfo[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
 
-  // Start webcam video stream
-  const startCamera = useCallback(async (deviceId?: string) => {
+  // Start video stream
+  const startCamera = useCallback(async () => {
     try {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -27,10 +26,9 @@ export function LiveCameraCapture({ onCapture, onCancel }: LiveCameraCaptureProp
 
       const constraints: MediaStreamConstraints = {
         video: {
-          deviceId: deviceId ? { exact: deviceId } : undefined,
-          facingMode: deviceId ? undefined : { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920, min: 640 },
+          height: { ideal: 1080, min: 480 },
         },
       };
 
@@ -39,23 +37,17 @@ export function LiveCameraCapture({ onCapture, onCancel }: LiveCameraCaptureProp
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(e => console.warn('Video play error:', e));
+        };
       }
 
       setHasPermission(true);
-
-      // Enumerate available video input devices
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoInputs = devices.filter(d => d.kind === 'videoinput');
-      setDeviceList(videoInputs);
-      if (!selectedDeviceId && videoInputs.length > 0) {
-        setSelectedDeviceId(videoInputs[0].deviceId);
-      }
     } catch (err) {
-      console.warn('Camera access denied or unavailable:', err);
+      console.warn('Camera access unavailable:', err);
       setHasPermission(false);
     }
-  }, [selectedDeviceId]);
+  }, []);
 
   useEffect(() => {
     startCamera();
@@ -66,48 +58,77 @@ export function LiveCameraCapture({ onCapture, onCancel }: LiveCameraCaptureProp
     };
   }, [startCamera]);
 
-  // Take high-resolution snapshot from video stream
+  // Capture current frame from webcam
   const takeSnapshot = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    if (!video || !canvas) {
+      toast.error('Camera stream not ready. Please try using file selection.');
+      return;
+    }
 
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+    const w = video.videoWidth || 1280;
+    const h = video.videoHeight || 720;
+    canvas.width = w;
+    canvas.height = h;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, w, h);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
     setCapturedDataUrl(dataUrl);
     setIsScanning(false);
-    toast.success('Document photo captured!');
+    toast.success('Document captured successfully!');
   };
 
-  // Confirm and send captured image to OCR pipeline
+  // Direct device camera input fallback
+  const handleDeviceFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string;
+      setCapturedDataUrl(dataUrl);
+      setIsScanning(false);
+      toast.success('Photo loaded from camera!');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Confirm and send image
   const confirmCapture = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || !capturedDataUrl) return;
+    if (!capturedDataUrl) return;
 
-    canvas.toBlob(blob => {
-      if (blob) {
+    // Convert dataUrl to blob
+    fetch(capturedDataUrl)
+      .then(res => res.blob())
+      .then(blob => {
         onCapture(blob, capturedDataUrl);
-      }
-    }, 'image/jpeg', 0.95);
+      })
+      .catch(() => {
+        // Fallback canvas to blob
+        const canvas = canvasRef.current;
+        if (canvas) {
+          canvas.toBlob(blob => {
+            if (blob) onCapture(blob, capturedDataUrl);
+          }, 'image/jpeg', 0.95);
+        }
+      });
   };
 
-  // Retake photo
   const retake = () => {
     setCapturedDataUrl(null);
     setIsScanning(true);
     if (videoRef.current && streamRef.current) {
-      videoRef.current.play();
+      videoRef.current.play().catch(() => {});
     }
   };
 
   return (
     <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl relative text-white">
-      {/* Top Header */}
+      {/* Top Bar */}
       <div className="p-4 bg-slate-800/80 backdrop-blur-md border-b border-slate-700 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
@@ -115,12 +136,12 @@ export function LiveCameraCapture({ onCapture, onCancel }: LiveCameraCaptureProp
           </div>
           <div>
             <h3 className="font-semibold text-sm text-slate-100 flex items-center gap-2">
-              Live Document Scanner
+              Live Document Camera Scanner
               <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                A4 Document Guide
+                A4 Reticle
               </span>
             </h3>
-            <p className="text-xs text-slate-400">Position Khatauni or Khasra paper inside the reticle</p>
+            <p className="text-xs text-slate-400">Position Khatauni / Khasra document inside the box</p>
           </div>
         </div>
 
@@ -134,54 +155,55 @@ export function LiveCameraCapture({ onCapture, onCancel }: LiveCameraCaptureProp
         )}
       </div>
 
-      {/* Camera Viewfinder / Preview Area */}
+      {/* Viewfinder Frame */}
       <div className="relative aspect-[4/3] md:aspect-[16/9] bg-black overflow-hidden flex items-center justify-center">
-        {hasPermission === false ? (
+        {capturedDataUrl ? (
+          /* Snapshot Preview */
+          <div className="relative w-full h-full flex items-center justify-center bg-slate-950">
+            <img
+              src={capturedDataUrl}
+              alt="Captured Land Record"
+              className="max-w-full max-h-full object-contain"
+            />
+            <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg border border-emerald-500/40 text-emerald-400 text-xs flex items-center gap-2">
+              <CheckCircle className="w-4 h-4" /> Snapshot Ready for Multilingual OCR
+            </div>
+          </div>
+        ) : hasPermission === false ? (
+          /* Permission fallback */
           <div className="p-8 text-center max-w-md space-y-4">
             <div className="w-14 h-14 mx-auto rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
               <AlertCircle className="w-7 h-7" />
             </div>
-            <h4 className="font-semibold text-slate-200">Camera Permission Required</h4>
+            <h4 className="font-semibold text-slate-200">Camera Access Direct Mode</h4>
             <p className="text-xs text-slate-400">
-              Please grant webcam permission in your browser or use the file upload option to digitize land records.
+              Click below to snap directly using your device's native camera or upload a saved photo.
             </p>
             <button
-              onClick={() => startCamera()}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 mx-auto transition-colors shadow-lg shadow-emerald-600/30"
             >
-              Retry Camera Connection
+              <Camera className="w-4 h-4" /> Open Device Camera
             </button>
           </div>
-        ) : capturedDataUrl ? (
-          /* Snapshot Preview */
-          <div className="relative w-full h-full">
-            <img
-              src={capturedDataUrl}
-              alt="Captured Land Record"
-              className="w-full h-full object-contain bg-black"
-            />
-            <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-emerald-500/40 text-emerald-400 text-xs flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" /> Snapshot Ready for Multilingual OCR
-            </div>
-          </div>
         ) : (
-          /* Live Stream */
+          /* Active Live Stream */
           <>
             <video
               ref={videoRef}
+              autoPlay
               playsInline
               muted
               className="w-full h-full object-cover"
             />
 
-            {/* Document Alignment Reticle (A4 Aspect Ratio Guide) */}
-            <div className="absolute inset-8 md:inset-12 border-2 border-emerald-400/50 rounded-xl pointer-events-none flex flex-col justify-between p-4">
+            {/* Document Reticle */}
+            <div className="absolute inset-8 md:inset-12 border-2 border-emerald-400/60 rounded-xl pointer-events-none flex flex-col justify-between p-4">
               <div className="flex justify-between">
                 <div className="w-6 h-6 border-t-4 border-l-4 border-emerald-400" />
                 <div className="w-6 h-6 border-t-4 border-r-4 border-emerald-400" />
               </div>
 
-              {/* Animated Laser Scanning Beam */}
               {isScanning && (
                 <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_#10b981] animate-bounce duration-1000" />
               )}
@@ -192,63 +214,58 @@ export function LiveCameraCapture({ onCapture, onCancel }: LiveCameraCaptureProp
               </div>
             </div>
 
-            {/* Guide Badge */}
             <div className="absolute bottom-4 bg-slate-900/80 backdrop-blur-md px-4 py-1.5 rounded-full border border-slate-700 text-xs text-slate-300 pointer-events-none flex items-center gap-2">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Auto-Deconvolution &amp; Binarization Active
             </div>
           </>
         )}
 
-        {/* Hidden Canvas for Frame Capture */}
         <canvas ref={canvasRef} className="hidden" />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleDeviceFileInput}
+          className="hidden"
+        />
       </div>
 
-      {/* Bottom Action Controls */}
+      {/* Action Footer */}
       <div className="p-4 bg-slate-800/90 border-t border-slate-700 flex items-center justify-between">
-        <div className="text-xs text-slate-400 hidden sm:block">
-          {deviceList.length > 1 ? (
-            <select
-              value={selectedDeviceId}
-              onChange={e => {
-                setSelectedDeviceId(e.target.value);
-                startCamera(e.target.value);
-              }}
-              className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-300 text-xs"
-            >
-              {deviceList.map(dev => (
-                <option key={dev.deviceId} value={dev.deviceId}>
-                  {dev.label || `Camera ${dev.deviceId.slice(0, 5)}`}
-                </option>
-              ))}
-            </select>
-          ) : (
-            'High-Resolution Sensor'
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 transition-colors"
+        >
+          <ImageIcon className="w-3.5 h-3.5" /> Direct Camera / Gallery
+        </button>
 
-        <div className="flex items-center gap-3 ml-auto">
+        <div className="flex items-center gap-3">
           {capturedDataUrl ? (
             <>
               <button
+                type="button"
                 onClick={retake}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-2 transition-colors"
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Retake Photo
               </button>
               <button
+                type="button"
                 onClick={confirmCapture}
-                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors shadow-lg shadow-emerald-600/30"
+                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/30 active:scale-95"
               >
-                <CheckCircle className="w-4 h-4" /> Run Sarvam AI OCR →
+                <CheckCircle className="w-4 h-4" /> Run Multilingual OCR →
               </button>
             </>
           ) : (
             <button
+              type="button"
               onClick={takeSnapshot}
-              disabled={hasPermission === false}
-              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/30 active:scale-95"
+              className="px-7 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/30 active:scale-95"
             >
-              <Camera className="w-4 h-4" /> Capture Document
+              <Camera className="w-4 h-4" /> Snap Photo
             </button>
           )}
         </div>

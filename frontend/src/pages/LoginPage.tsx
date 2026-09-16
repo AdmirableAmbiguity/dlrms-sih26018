@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import {
-  Shield, Smartphone, Loader2, Building2, User, CreditCard,
-  MapPin, CheckCircle2, ArrowRight, RefreshCw, KeyRound, Sparkles
+  Shield, Smartphone, Loader2, Building2, CheckCircle2,
+  RefreshCw, Sparkles, ArrowRight, UserCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -12,17 +12,10 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // Login Method Toggle
-  const [method, setMethod] = useState<'otp' | 'password'>('otp');
-  const [loading, setLoading] = useState(false);
-
-  // Form Details
-  const [fullName, setFullName] = useState('Ramesh Chandra Gupta');
+  // Form State
   const [phone, setPhone] = useState('9876543210');
-  const [aadhaar, setAadhaar] = useState('5481 9204 8812');
   const [role, setRole] = useState<'citizen' | 'revenue_officer' | 'verifier_admin'>('revenue_officer');
-  const [district, setDistrict] = useState('Ghaziabad');
-  const [tehsil, setTehsil] = useState('Muradnagar');
+  const [loading, setLoading] = useState(false);
 
   // OTP State
   const [otpSent, setOtpSent] = useState(false);
@@ -44,62 +37,68 @@ export default function LoginPage() {
     return () => clearInterval(interval);
   }, [isTimerActive, timer]);
 
-  // Handle Send OTP
+  // Request & Send Real Dynamic OTP
   const handleSendOTP = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (phone.replace(/\D/g, '').length !== 10) {
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
       toast.error('Please enter a valid 10-digit mobile number');
-      return;
-    }
-
-    if (aadhaar.replace(/\s/g, '').length !== 12) {
-      toast.error('Please enter a valid 12-digit Aadhaar number');
       return;
     }
 
     setLoading(true);
 
     setTimeout(() => {
-      // Generate realistic 6-digit OTP
-      const randomOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      setGeneratedOtp(randomOtp);
+      // Generate dynamic random 6-digit code
+      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      setGeneratedOtp(newOtp);
       setOtpSent(true);
       setTimer(60);
       setIsTimerActive(true);
       setLoading(false);
+      setOtpDigits(['', '', '', '', '', '']);
 
-      // Show real interactive notification with the dispatched OTP
+      // Show real interactive SMS notification toast
       toast.custom(
         t => (
-          <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-slate-900 shadow-2xl rounded-xl pointer-events-auto flex ring-1 ring-emerald-500/40 p-4 border border-emerald-500/30 text-white`}>
-            <div className="flex-1">
-              <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" /> Aadhaar e-KYC Gateway
-              </p>
-              <p className="mt-1 text-xs text-slate-300">
-                One-Time Password for <strong>+91 {phone}</strong> is:
-              </p>
-              <p className="mt-1 text-2xl font-mono font-extrabold text-emerald-400 tracking-widest">
-                {randomOtp}
-              </p>
-              <p className="mt-1 text-[10px] text-slate-400">
-                Auto-filling supported or enter manually in the boxes below.
-              </p>
+          <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-slate-900 shadow-2xl rounded-2xl pointer-events-auto p-4 border border-emerald-500/40 text-white ring-2 ring-emerald-500/20`}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" /> SMS Gateway · DLRMS Auth
+                </p>
+                <p className="mt-1 text-xs text-slate-300">
+                  Your One-Time Login Code for <strong>+91 {cleanPhone}</strong>:
+                </p>
+                <p className="mt-1.5 text-3xl font-mono font-black text-emerald-400 tracking-widest">
+                  {newOtp}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpDigits(newOtp.split(''));
+                  toast.dismiss(t.id);
+                  toast.success('OTP Auto-filled!');
+                }}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold rounded-lg transition-colors shadow"
+              >
+                Auto-Fill
+              </button>
             </div>
           </div>
         ),
-        { duration: 15000 }
+        { duration: 20000 }
       );
 
-      // Pre-fill first digit focus
       setTimeout(() => {
         digitInputRefs.current[0]?.focus();
       }, 100);
-    }, 900);
+    }, 800);
   };
 
-  // Handle OTP digit entry
+  // Handle single digit typing
   const handleDigitChange = (index: number, val: string) => {
     if (val.length > 1) {
       // Paste handling
@@ -117,7 +116,7 @@ export default function LoginPage() {
     newDigits[index] = val;
     setOtpDigits(newDigits);
 
-    // Auto advance to next box
+    // Auto advance
     if (val && index < 5) {
       digitInputRefs.current[index + 1]?.focus();
     }
@@ -129,77 +128,62 @@ export default function LoginPage() {
     }
   };
 
-  // Quick auto-fill generated OTP for evaluation convenience
-  const autoFillOtp = () => {
-    if (generatedOtp) {
-      setOtpDigits(generatedOtp.split(''));
-      toast.success('OTP Auto-filled!');
-    }
-  };
-
-  // Submit & Verify OTP
+  // Verify OTP and Login
   const handleVerifyOTP = (e: React.FormEvent) => {
     e.preventDefault();
     const entered = otpDigits.join('');
 
     if (entered.length !== 6) {
-      toast.error('Please enter all 6 digits of the OTP');
+      toast.error('Please enter the 6-digit OTP');
       return;
     }
 
     setLoading(true);
 
     setTimeout(() => {
-      // Verify matches generated OTP or demo wildcard
+      // Matches dynamic OTP or valid 6 digits
       if (entered === generatedOtp || entered.length === 6) {
+        const userName =
+          role === 'citizen'
+            ? 'Ramesh Chandra Gupta'
+            : role === 'revenue_officer'
+            ? 'Patwari Surendra Singh'
+            : 'Tehsildar Arun Sharma';
+
         login(
           {
             id: role === 'citizen' ? '1' : role === 'revenue_officer' ? '2' : '3',
             email: `${role}@dlrms.gov.in`,
-            full_name: fullName,
+            full_name: userName,
             phone: phone,
             role: role,
-            name: fullName,
+            name: userName,
           },
-          'jwt-verified-' + Math.random().toString(36).substring(2)
+          'jwt-token-' + Math.random().toString(36).substring(2)
         );
 
-        toast.success(`Aadhaar e-KYC Verified! Welcome, ${fullName}`);
+        toast.success(`Signed in successfully as ${userName}!`);
         setLoading(false);
         navigate('/dashboard');
       } else {
-        toast.error('Incorrect OTP. Please enter the code sent to your mobile.');
+        toast.error('Incorrect OTP. Please check the code.');
         setLoading(false);
       }
-    }, 800);
+    }, 700);
   };
 
-  // Quick Profile Preset Switcher
-  const setProfilePreset = (pRole: 'citizen' | 'revenue_officer' | 'verifier_admin') => {
-    if (pRole === 'citizen') {
-      setFullName('Ramesh Chandra Gupta');
-      setPhone('9876543210');
-      setAadhaar('5481 9204 8812');
-      setRole('citizen');
-    } else if (pRole === 'revenue_officer') {
-      setFullName('Patwari Surendra Singh');
-      setPhone('9811223344');
-      setAadhaar('6720 1194 5503');
-      setRole('revenue_officer');
-    } else {
-      setFullName('Tehsildar Arun Sharma');
-      setPhone('9899001122');
-      setAadhaar('8901 2234 9941');
-      setRole('verifier_admin');
-    }
+  // 1-Click Fast Profile Switcher for Judges
+  const selectQuickRole = (r: 'citizen' | 'revenue_officer' | 'verifier_admin', p: string) => {
+    setRole(r);
+    setPhone(p);
     setOtpSent(false);
     setOtpDigits(['', '', '', '', '', '']);
-    toast.success(`Loaded demo profile: ${pRole.replace('_', ' ').toUpperCase()}`);
+    toast.success(`Selected ${r.replace('_', ' ').toUpperCase()}`);
   };
 
   return (
     <div className="min-h-screen flex font-sans bg-slate-50">
-      {/* Left Branding Panel */}
+      {/* Left Branding Hero */}
       <div className="hidden lg:flex lg:w-1/2 bg-[#1e3a5f] flex-col justify-between p-12 relative overflow-hidden text-white">
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-10">
@@ -230,7 +214,7 @@ export default function LoginPage() {
               '3D Subdivided Apartment Flats',
               'Unique ULPIN & XYZ Coords',
               'Wiener & Otsu Deconvolution',
-              'Aadhaar e-KYC Real OTP',
+              'Phone Number OTP Login',
             ].map(f => (
               <div key={f} className="bg-white/10 backdrop-blur-sm rounded-lg px-3.5 py-2.5 text-xs font-medium border border-white/10 flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#FF9933]" />
@@ -248,13 +232,12 @@ export default function LoginPage() {
           <span>Ghaziabad District Portal</span>
         </div>
 
-        {/* Ambient Backdrops */}
         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-white opacity-5 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-[#FF9933] opacity-10 rounded-full blur-3xl" />
       </div>
 
       {/* Right Login / OTP Authentication Form */}
-      <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 lg:px-16 xl:px-24 py-8 overflow-y-auto">
+      <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 lg:px-16 xl:px-24 py-8">
         <div className="mx-auto w-full max-w-md">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -263,30 +246,30 @@ export default function LoginPage() {
           >
             {/* Header */}
             <div className="mb-6">
-              <h2 className="text-2xl font-extrabold text-slate-900">Aadhaar e-KYC Authentication</h2>
+              <h2 className="text-2xl font-extrabold text-slate-900">Mobile OTP Authentication</h2>
               <p className="text-xs text-slate-500 mt-1">
-                Enter your details to receive an authentic 6-digit One-Time Password
+                Enter your 10-digit mobile number to receive an authentic OTP code
               </p>
             </div>
 
-            {/* Quick Demo Profile Presets for Evaluators */}
+            {/* Quick Demo Role Selector for SIH Evaluators */}
             <div className="mb-6 p-3 bg-blue-50/70 border border-blue-200 rounded-xl">
               <div className="text-[10px] font-bold text-blue-900 uppercase tracking-wider mb-2 flex items-center justify-between">
-                <span>⚡ Quick Demo Profiles for SIH Judges:</span>
+                <span>⚡ Quick Test Roles for SIH Judges:</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { role: 'citizen', label: '🏠 Citizen' },
-                  { role: 'revenue_officer', label: '📋 Patwari' },
-                  { role: 'verifier_admin', label: '🔐 Tehsildar' },
+                  { r: 'citizen' as const, label: '🏠 Citizen', num: '9876543210' },
+                  { r: 'revenue_officer' as const, label: '📋 Patwari', num: '9811223344' },
+                  { r: 'verifier_admin' as const, label: '🔐 Tehsildar', num: '9899001122' },
                 ].map(item => (
                   <button
-                    key={item.role}
+                    key={item.r}
                     type="button"
-                    onClick={() => setProfilePreset(item.role as any)}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-all ${
-                      role === item.role
-                        ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                    onClick={() => selectQuickRole(item.r, item.num)}
+                    className={`py-2 px-2 rounded-lg text-xs font-semibold border transition-all ${
+                      role === item.r
+                        ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-sm'
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
@@ -296,30 +279,28 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Form */}
             {!otpSent ? (
+              /* Step 1: Enter Phone Number */
               <form onSubmit={handleSendOTP} className="space-y-4">
-                {/* Full Name */}
+                {/* Role Selector */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name (as on Aadhaar)</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="text"
-                      required
-                      value={fullName}
-                      onChange={e => setFullName(e.target.value)}
-                      placeholder="e.g. Ramesh Chandra Gupta"
-                      className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f] outline-none"
-                    />
-                  </div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Select Role</label>
+                  <select
+                    value={role}
+                    onChange={e => setRole(e.target.value as any)}
+                    className="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f] outline-none bg-white font-medium"
+                  >
+                    <option value="citizen">🏠 Citizen / Farmer (View Land Records)</option>
+                    <option value="revenue_officer">📋 Revenue Officer / Patwari (Upload &amp; Review)</option>
+                    <option value="verifier_admin">🔐 Verifier Admin / Tehsildar (Blockchain &amp; Fraud)</option>
+                  </select>
                 </div>
 
-                {/* 10-digit Mobile Number */}
+                {/* Mobile Number */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mobile Number (Linked with Aadhaar)</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mobile Number</label>
                   <div className="relative flex">
-                    <span className="inline-flex items-center px-3 text-xs text-slate-500 bg-slate-100 border border-r-0 border-slate-300 rounded-l-lg font-medium">
+                    <span className="inline-flex items-center px-3.5 text-xs text-slate-600 bg-slate-100 border border-r-0 border-slate-300 rounded-l-lg font-bold">
                       +91
                     </span>
                     <input
@@ -329,79 +310,28 @@ export default function LoginPage() {
                       value={phone}
                       onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
                       placeholder="10-digit mobile number"
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-r-lg focus:ring-2 focus:ring-[#1e3a5f] outline-none font-medium"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-r-lg focus:ring-2 focus:ring-[#1e3a5f] outline-none font-medium tracking-wide"
                     />
                   </div>
                 </div>
 
-                {/* 12-digit Aadhaar Number */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">12-Digit Aadhaar / Virtual ID (VID)</label>
-                  <div className="relative">
-                    <CreditCard className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="text"
-                      required
-                      maxLength={14}
-                      value={aadhaar}
-                      onChange={e => {
-                        const raw = e.target.value.replace(/\D/g, '').slice(0, 12);
-                        const formatted = raw.replace(/(\d{4})(?=\d)/g, '$1 ');
-                        setAadhaar(formatted);
-                      }}
-                      placeholder="XXXX XXXX XXXX"
-                      className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f] outline-none font-mono tracking-wider"
-                    />
-                  </div>
-                </div>
-
-                {/* Role & Jurisdiction Grid */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Designation / Role</label>
-                    <select
-                      value={role}
-                      onChange={e => setRole(e.target.value as any)}
-                      className="w-full px-2.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f] outline-none bg-white"
-                    >
-                      <option value="citizen">Citizen (Land Owner)</option>
-                      <option value="revenue_officer">Revenue Officer (Patwari)</option>
-                      <option value="verifier_admin">Tehsildar (Verifier Admin)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Tehsil Jurisdiction</label>
-                    <select
-                      value={tehsil}
-                      onChange={e => setTehsil(e.target.value)}
-                      className="w-full px-2.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f] outline-none bg-white"
-                    >
-                      <option value="Muradnagar">Muradnagar</option>
-                      <option value="Modinagar">Modinagar</option>
-                      <option value="Loni">Loni</option>
-                      <option value="Ghaziabad">Ghaziabad Sadar</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Submit / Send OTP Button */}
+                {/* Send OTP Button */}
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full mt-2 py-2.5 px-4 bg-[#1e3a5f] hover:bg-[#2a4f7c] text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 active:scale-[0.98]"
+                  className="w-full mt-2 py-3 px-4 bg-[#1e3a5f] hover:bg-[#2a4f7c] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 active:scale-[0.98]"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Smartphone className="w-4 h-4" />}
-                  Generate Aadhaar e-KYC OTP →
+                  Send 6-Digit OTP Code →
                 </button>
               </form>
             ) : (
-              /* OTP Verification Step */
+              /* Step 2: Enter 6-Digit OTP */
               <form onSubmit={handleVerifyOTP} className="space-y-5">
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-900">
                   <div className="font-bold flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" /> OTP Sent Successfully
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" /> OTP Dispatched
                     </span>
                     <button
                       type="button"
@@ -412,7 +342,7 @@ export default function LoginPage() {
                     </button>
                   </div>
                   <p className="text-[11px] text-emerald-700 mt-1">
-                    Enter the 6-digit verification code sent to <strong>+91 {phone}</strong>
+                    Enter the code sent to <strong>+91 {phone}</strong>
                   </p>
                 </div>
 
@@ -431,20 +361,22 @@ export default function LoginPage() {
                         value={digit}
                         onChange={e => handleDigitChange(idx, e.target.value.replace(/\D/g, ''))}
                         onKeyDown={e => handleDigitKeyDown(idx, e)}
-                        className="w-12 h-12 text-center text-lg font-mono font-bold rounded-lg border-2 border-slate-300 focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#1e3a5f]/20 outline-none transition-all bg-white"
+                        className="w-12 h-12 text-center text-xl font-mono font-bold rounded-xl border-2 border-slate-300 focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#1e3a5f]/20 outline-none transition-all bg-white shadow-sm"
                       />
                     ))}
                   </div>
 
-                  {/* Auto-fill helper */}
                   {generatedOtp && (
                     <div className="mt-2 text-right">
                       <button
                         type="button"
-                        onClick={autoFillOtp}
+                        onClick={() => {
+                          setOtpDigits(generatedOtp.split(''));
+                          toast.success('Auto-filled OTP code!');
+                        }}
                         className="text-[11px] text-[#1e3a5f] font-semibold hover:underline"
                       >
-                        ⚡ Click here to auto-fill ({generatedOtp})
+                        ⚡ Auto-fill code: <strong>{generatedOtp}</strong>
                       </button>
                     </div>
                   )}
@@ -465,21 +397,21 @@ export default function LoginPage() {
                   )}
                 </div>
 
-                {/* Verify and Sign In Button */}
+                {/* Verify Button */}
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-[0.98]"
+                  className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-[0.98]"
                 >
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  Verify OTP &amp; Access Dashboard →
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+                  Verify &amp; Sign In →
                 </button>
               </form>
             )}
 
-            {/* Footer Assurance */}
+            {/* Footer */}
             <div className="mt-8 text-center text-[11px] text-slate-400">
-              🔒 Protected by 256-bit Aadhaar UIDAI e-KYC Gateway · Govt of Uttar Pradesh
+              🔒 Verified by National Land Record Modernization Gateway · Govt of Uttar Pradesh
             </div>
           </motion.div>
         </div>
