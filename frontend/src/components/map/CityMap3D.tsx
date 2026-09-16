@@ -1,546 +1,567 @@
-import { useRef, useState, useMemo } from 'react';
-import { Canvas, useFrame, ThreeEvent, useThree } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, Text, Html, Stars, Grid } from '@react-three/drei';
+import { useRef, useState, useMemo, useCallback } from 'react';
+import { Canvas, useFrame, ThreeEvent } from '@react-three/fiber';
+import { OrbitControls, PerspectiveCamera, Stars, Html, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { generateULPIN, resolveCoordinates } from '../../lib/ulpin';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-export interface BuildingDef {
-  id: string;
-  x: number; z: number;
-  width: number; depth: number;
-  floors: number;
-  unitsPerFloor: number;
-  label: string;
-  village: string;
-  parcelNo: number;
-  district: string;
-  landType: 'residential' | 'commercial' | 'government' | 'agricultural' | 'industrial';
-  status: 'validated' | 'needs_review' | 'conflict' | 'pending';
-  blockchainLocked: boolean;
-  isFraud?: boolean;
+// ── Seeded random (deterministic city layout) ─────────────────────────────────
+function seededRng(seed: number) {
+  let s = seed;
+  return () => { s = (s * 16807 + 0) % 2147483647; return (s - 1) / 2147483646; };
 }
 
-export interface UnitInfo {
-  ulpin: string;
-  buildingId: string;
-  floor: number;
-  unit: number;
-  owner: string;
-  status: 'validated' | 'needs_review' | 'conflict' | 'pending';
-  area: number;
-  coords: ReturnType<typeof resolveCoordinates>;
-}
-
-// ── Neon color palette ────────────────────────────────────────────────────────
-const NEON = {
+// ── Neon palette ──────────────────────────────────────────────────────────────
+export const NEON = {
   cyan:    '#00fff0',
   green:   '#00ff88',
-  red:     '#ff3366',
+  red:     '#ff2255',
   yellow:  '#ffcc00',
   purple:  '#bf5fff',
   orange:  '#ff8c00',
-  blue:    '#0099ff',
-  gray:    '#334155',
-  dim:     '#1a2744',
+  blue:    '#3399ff',
+  pink:    '#ff66cc',
+  teal:    '#00ccaa',
+  grid:    '#0d2137',
 };
 
-const STATUS_NEON: Record<string, string> = {
-  validated:   NEON.green,
-  needs_review: NEON.yellow,
-  conflict:    NEON.red,
-  pending:     NEON.gray,
-};
+// ── District definitions ──────────────────────────────────────────────────────
+interface District {
+  id: string;
+  name: string;
+  cx: number; cz: number;        // centre in scene units
+  radius: number;
+  type: 'commercial' | 'residential' | 'industrial' | 'agricultural' | 'civic';
+  color: string;
+  heightRange: [number, number];
+  density: number;               // buildings per grid cell
+  village: string;
+}
 
-const LAND_NEON: Record<string, string> = {
-  residential: NEON.blue,
-  commercial:  NEON.purple,
-  government:  NEON.orange,
-  agricultural:'#33cc33',
-  industrial:  NEON.gray,
-};
-
-// ── Seed owners for units ─────────────────────────────────────────────────────
-const OWNERS = [
-  'Ramesh C. Gupta','Sunita Devi','Anil Kumar Jain','Priya Sharma','Vikram Singh',
-  'Geeta Rani','Mohan Das','Anita Kumari','Rajesh Tiwari','Kavita Verma',
-  'Dev Prakash','Farhan Siddiqui','Brijesh Sharma','Chetan Verma','Esha Rani',
-  'Narendra Jain','Savita Rani','Pushpa Yadav','Bharat Bhushan','Sanjay Mishra',
+const DISTRICTS: District[] = [
+  { id:'cbd',    name:'Central Business District', cx:0,    cz:0,    radius:18, type:'commercial',   color:NEON.purple, heightRange:[8,28],  density:0.9, village:'Raj Nagar'       },
+  { id:'vaish',  name:'Vaishali',                 cx:28,   cz:-15,  radius:16, type:'residential',  color:NEON.blue,   heightRange:[5,14],  density:0.8, village:'Vaishali'        },
+  { id:'indira', name:'Indirapuram',              cx:-30,  cz:-18,  radius:18, type:'residential',  color:NEON.blue,   heightRange:[6,16],  density:0.85,village:'Indirapuram'     },
+  { id:'kavi',   name:'Kavi Nagar',               cx:30,   cz:16,   radius:14, type:'commercial',   color:NEON.purple, heightRange:[7,22],  density:0.7, village:'Kavi Nagar'      },
+  { id:'loni',   name:'Loni Industrial',          cx:-35,  cz:22,   radius:15, type:'industrial',   color:NEON.orange, heightRange:[3,8],   density:0.6, village:'Loni'            },
+  { id:'tronica',name:'Tronica City',             cx:0,    cz:38,   radius:16, type:'industrial',   color:NEON.orange, heightRange:[4,10],  density:0.65,village:'Tronica City'    },
+  { id:'vijay',  name:'Vijay Nagar',              cx:-20,  cz:20,   radius:13, type:'residential',  color:NEON.teal,   heightRange:[4,12],  density:0.75,village:'Vijay Nagar'     },
+  { id:'cross',  name:'Crossings Republik',       cx:35,   cz:-35,  radius:14, type:'residential',  color:NEON.cyan,   heightRange:[8,20],  density:0.8, village:'Crossings Republik'},
+  { id:'shalim', name:'Shalimar Garden',          cx:-40,  cz:-8,   radius:12, type:'residential',  color:NEON.blue,   heightRange:[4,10],  density:0.7, village:'Shalimar Garden' },
+  { id:'arthal', name:'Arthala',                  cx:18,   cz:32,   radius:12, type:'residential',  color:NEON.teal,   heightRange:[3,9],   density:0.65,village:'Arthala'         },
+  { id:'agri1',  name:'Masuri Farmland',          cx:-55,  cz:10,   radius:18, type:'agricultural', color:NEON.green,  heightRange:[0.5,2], density:0.3, village:'Masuri'          },
+  { id:'agri2',  name:'Dasna Farmland',           cx:52,   cz:22,   radius:14, type:'agricultural', color:NEON.green,  heightRange:[0.5,2], density:0.3, village:'Dasna'           },
+  { id:'civic1', name:'Municipal Zone',           cx:12,   cz:-30,  radius:10, type:'civic',        color:NEON.yellow, heightRange:[5,12],  density:0.5, village:'Raj Nagar'       },
 ];
 
-// ── Satellite ground texture ──────────────────────────────────────────────────
-function createSatelliteTexture(): THREE.CanvasTexture {
-  const size = 1024;
-  const canvas = document.createElement('canvas');
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
+// ── Building data type ────────────────────────────────────────────────────────
+export interface CityBuilding {
+  id: string;
+  x: number; z: number;
+  width: number; depth: number;
+  height: number;
+  floors: number;
+  color: string;
+  districtId: string;
+  districtName: string;
+  village: string;
+  parcelNo: number;
+  ulpin: string;
+  status: 'validated' | 'needs_review' | 'conflict' | 'pending';
+  blockchainLocked: boolean;
+  isFraud: boolean;
+  landType: string;
+  owner: string;
+}
 
-  // Base dark terrain
-  ctx.fillStyle = '#0a1628';
-  ctx.fillRect(0, 0, size, size);
+// ── Owner names pool ──────────────────────────────────────────────────────────
+const OWNERS = [
+  'Ramesh C. Gupta','Sunita Devi Sharma','Anil Kumar Jain','Priya Verma',
+  'Vikram Singh Rawat','Geeta Rani Mishra','Mohan Das Srivastava','Anita Kumari',
+  'Rajesh Kumar Tiwari','Kavita Yadav','Dev Prakash Pandey','Farhan Siddiqui',
+  'Brijesh Sharma','Chetan Verma','Esha Rani','Narendra Kumar Jain',
+  'Savita Rani','Pushpa Yadav','Bharat Bhushan','Sanjay Mishra',
+  'Rekha Devi','Ajay Pratap Singh','Meera Kumari','Rakesh Gupta',
+  'Neha Agarwal','Suresh Chand','Pooja Sharma','Deepak Verma',
+];
 
-  // Agricultural green patches
-  const patches = [
-    { x: 200, y: 600, w: 200, h: 150 },
-    { x: 650, y: 100, w: 180, h: 200 },
-    { x: 50,  y: 200, w: 120, h: 100 },
-    { x: 800, y: 700, w: 150, h: 120 },
-  ];
-  patches.forEach(p => {
-    const grd = ctx.createRadialGradient(p.x + p.w/2, p.y + p.h/2, 0, p.x + p.w/2, p.y + p.h/2, p.w/1.5);
-    grd.addColorStop(0, 'rgba(30,80,30,0.7)');
-    grd.addColorStop(1, 'rgba(10,30,10,0)');
-    ctx.fillStyle = grd;
-    ctx.fillRect(p.x, p.y, p.w, p.h);
-  });
+const STATUS_POOL: CityBuilding['status'][] = ['validated','validated','validated','needs_review','conflict','pending'];
 
-  // Road network
-  ctx.strokeStyle = '#1a2744';
-  ctx.lineWidth = 8;
-  ctx.beginPath(); ctx.moveTo(512, 0); ctx.lineTo(512, size); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0, 512); ctx.lineTo(size, 512); ctx.stroke();
-  ctx.lineWidth = 4;
-  [256, 768].forEach(v => {
-    ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, size); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(size, v); ctx.stroke();
-  });
+// ── Procedural city generator ─────────────────────────────────────────────────
+export function generateCity(): CityBuilding[] {
+  const rng = seededRng(42);
+  const buildings: CityBuilding[] = [];
+  let parcelCounter = 100;
 
-  // Subtle neon grid overlay
-  ctx.strokeStyle = 'rgba(0,255,240,0.04)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < size; i += 64) {
-    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
+  const GRID_STEP = 6;
+  const CITY_HALF = 65;
+
+  for (let gx = -CITY_HALF; gx < CITY_HALF; gx += GRID_STEP) {
+    for (let gz = -CITY_HALF; gz < CITY_HALF; gz += GRID_STEP) {
+      // Find nearest district
+      let bestDist = Infinity;
+      let bestDistrict: District | null = null;
+      for (const d of DISTRICTS) {
+        const dist = Math.sqrt((gx - d.cx) ** 2 + (gz - d.cz) ** 2);
+        if (dist < d.radius && dist < bestDist) {
+          bestDist = dist;
+          bestDistrict = d;
+        }
+      }
+      if (!bestDistrict) continue;
+      if (rng() > bestDistrict.density) continue;
+
+      const d = bestDistrict;
+      const jx = (rng() - 0.5) * 2.5;
+      const jz = (rng() - 0.5) * 2.5;
+      const x = gx + jx;
+      const z = gz + jz;
+
+      const minH = d.heightRange[0];
+      const maxH = d.heightRange[1];
+      const height = minH + rng() * (maxH - minH);
+      const width = 1.8 + rng() * (d.type === 'industrial' ? 3.5 : 2.0);
+      const depth = 1.8 + rng() * (d.type === 'industrial' ? 3.5 : 2.0);
+      const floors = Math.max(1, Math.round(height / 3.2));
+
+      const status = STATUS_POOL[Math.floor(rng() * STATUS_POOL.length)];
+      const isFraud = rng() < 0.04; // 4% fraud rate
+      const blockchainLocked = status === 'validated' && rng() > 0.3;
+
+      parcelCounter++;
+      const ulpin = generateULPIN(d.village, parcelCounter);
+
+      buildings.push({
+        id: `b-${gx}-${gz}`,
+        x, z, width, depth, height, floors,
+        color: d.color,
+        districtId: d.id,
+        districtName: d.name,
+        village: d.village,
+        parcelNo: parcelCounter,
+        ulpin,
+        status,
+        blockchainLocked,
+        isFraud,
+        landType: d.type,
+        owner: OWNERS[Math.floor(rng() * OWNERS.length)],
+      });
+    }
   }
-
-  return new THREE.CanvasTexture(canvas);
+  return buildings;
 }
 
-// ── Animated neon grid ────────────────────────────────────────────────────────
-function NeonGrid() {
-  const ref = useRef<THREE.Mesh>(null!);
-  useFrame(({ clock }) => {
-    if (ref.current) {
-      const mat = ref.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.12 + Math.sin(clock.elapsedTime * 0.5) * 0.04;
-    }
+export const CITY_BUILDINGS = generateCity();
+
+// ── Animated road traffic dots ────────────────────────────────────────────────
+function TrafficDots() {
+  const ref = useRef<THREE.InstancedMesh>(null!);
+  const count = 80;
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+
+  // Traffic positions along main roads
+  const traffic = useMemo(() => Array.from({ length: count }, (_, i) => {
+    const onX = i % 2 === 0;
+    return {
+      onX,
+      pos: (Math.random() - 0.5) * 120,
+      speed: 0.08 + Math.random() * 0.12,
+      lane: (Math.floor(Math.random() * 3) - 1) * 3,
+      color: Math.random() > 0.5 ? '#ff4444' : '#ffcc00',
+    };
+  }), []);
+
+  useFrame(() => {
+    traffic.forEach((t, i) => {
+      t.pos += t.speed;
+      if (t.pos > 65) t.pos = -65;
+      dummy.position.set(
+        t.onX ? t.pos : t.lane,
+        0.15,
+        t.onX ? t.lane : t.pos,
+      );
+      dummy.scale.setScalar(0.25);
+      dummy.updateMatrix();
+      ref.current?.setMatrixAt(i, dummy.matrix);
+    });
+    if (ref.current) ref.current.instanceMatrix.needsUpdate = true;
   });
+
   return (
-    <group>
-      <Grid args={[200, 200]} position={[0, 0.02, 0]}
-        cellSize={5} cellThickness={0.4} cellColor={NEON.cyan}
-        sectionSize={20} sectionThickness={1} sectionColor={NEON.purple}
-        fadeDistance={100} fadeStrength={1.5} />
-    </group>
+    <instancedMesh ref={ref} args={[undefined, undefined, count]}>
+      <sphereGeometry args={[1, 4, 4]} />
+      <meshBasicMaterial color="#ffcc00" />
+    </instancedMesh>
   );
 }
 
-// ── Blockchain beam ───────────────────────────────────────────────────────────
-function BlockchainBeam({ x, z, height }: { x: number; z: number; height: number }) {
-  const ref = useRef<THREE.Mesh>(null!);
-  useFrame(({ clock }) => {
-    if (ref.current) {
-      const mat = ref.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.15 + Math.abs(Math.sin(clock.elapsedTime * 2)) * 0.35;
-      ref.current.scale.y = 1 + Math.sin(clock.elapsedTime * 1.5) * 0.05;
-    }
-  });
-  return (
-    <mesh ref={ref} position={[x, height / 2, z]}>
-      <cylinderGeometry args={[0.08, 0.08, height, 8]} />
-      <meshBasicMaterial color={NEON.cyan} transparent opacity={0.3} />
-    </mesh>
-  );
-}
+// ── Single building mesh (instanced-style but individual for click) ────────────
+const STATUS_GLOW: Record<string, string> = {
+  validated: '#00ff88', needs_review: '#ffcc00', conflict: '#ff2255', pending: '#334155',
+};
 
-// ── Fraud beacon ──────────────────────────────────────────────────────────────
-function FraudBeacon({ x, y, z }: { x: number; y: number; z: number }) {
-  const ref = useRef<THREE.Mesh>(null!);
-  const ringRef = useRef<THREE.Mesh>(null!);
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
-    if (ref.current) {
-      ref.current.scale.setScalar(1 + Math.sin(t * 5) * 0.3);
-      (ref.current.material as THREE.MeshStandardMaterial).emissiveIntensity = 1 + Math.sin(t * 5);
-    }
-    if (ringRef.current) {
-      ringRef.current.scale.setScalar(1 + (t % 2) * 0.8);
-      (ringRef.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.6 - (t % 2) * 0.3);
-    }
-  });
-  return (
-    <group position={[x, y, z]}>
-      <mesh ref={ref}>
-        <sphereGeometry args={[0.3, 16, 16]} />
-        <meshStandardMaterial color={NEON.red} emissive={NEON.red} emissiveIntensity={2} transparent opacity={0.9} />
-      </mesh>
-      <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.4, 0.5, 32]} />
-        <meshBasicMaterial color={NEON.red} transparent opacity={0.5} side={THREE.DoubleSide} />
-      </mesh>
-    </group>
-  );
-}
-
-// ── Individual unit mesh ──────────────────────────────────────────────────────
-function UnitBlock({
-  unitInfo, bx, bz, floor, unitIdx, unitW, depth, floorH,
-  onHover, onSelect,
-}: {
-  unitInfo: UnitInfo;
-  bx: number; bz: number; floor: number; unitIdx: number;
-  unitW: number; depth: number; floorH: number;
-  onHover: (u: UnitInfo | null) => void;
-  onSelect: (u: UnitInfo | null) => void;
+function Building({ b, onHover, onClick }: {
+  b: CityBuilding;
+  onHover: (b: CityBuilding | null) => void;
+  onClick: (b: CityBuilding) => void;
 }) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const [hovered, setHovered] = useState(false);
-  const color = new THREE.Color(STATUS_NEON[unitInfo.status] || NEON.gray);
+  const color = useMemo(() => new THREE.Color(b.color), [b.color]);
 
-  useFrame(() => {
+  useFrame(({ clock }) => {
     if (!meshRef.current) return;
-    const target = hovered ? 1.15 : 1.0;
-    meshRef.current.scale.x += (target - meshRef.current.scale.x) * 0.15;
-    meshRef.current.scale.z += (target - meshRef.current.scale.z) * 0.15;
     const mat = meshRef.current.material as THREE.MeshStandardMaterial;
-    mat.emissiveIntensity += ((hovered ? 0.8 : 0.2) - mat.emissiveIntensity) * 0.1;
+    const pulse = b.isFraud ? Math.abs(Math.sin(clock.elapsedTime * 4)) : 0;
+    mat.emissiveIntensity = (hovered ? 0.9 : 0.25) + pulse * 0.6;
+    if (hovered) {
+      meshRef.current.scale.x = THREE.MathUtils.lerp(meshRef.current.scale.x, 1.06, 0.12);
+      meshRef.current.scale.z = THREE.MathUtils.lerp(meshRef.current.scale.z, 1.06, 0.12);
+    } else {
+      meshRef.current.scale.x = THREE.MathUtils.lerp(meshRef.current.scale.x, 1, 0.1);
+      meshRef.current.scale.z = THREE.MathUtils.lerp(meshRef.current.scale.z, 1, 0.1);
+    }
   });
 
-  const xOff = (unitIdx - 0.5) * unitW;
-  const yOff = floor * floorH + floorH / 2;
-
   return (
-    <mesh
-      ref={meshRef}
-      position={[bx + xOff, yOff, bz]}
-      castShadow
-      onPointerOver={(e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true); onHover(unitInfo); document.body.style.cursor = 'pointer'; }}
-      onPointerOut={() => { setHovered(false); onHover(null); document.body.style.cursor = 'default'; }}
-      onClick={(e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onSelect(unitInfo); }}
-    >
-      <boxGeometry args={[unitW - 0.12, floorH - 0.15, depth - 0.12]} />
-      <meshStandardMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={0.2}
-        roughness={0.3}
-        metalness={0.4}
-        transparent
-        opacity={0.85}
-      />
-    </mesh>
-  );
-}
-
-// ── Floor separator line ──────────────────────────────────────────────────────
-function FloorLine({ x, z, width, depth, y }: { x: number; z: number; width: number; depth: number; y: number }) {
-  return (
-    <mesh position={[x, y, z]}>
-      <boxGeometry args={[width + 0.1, 0.06, depth + 0.1]} />
-      <meshBasicMaterial color={NEON.cyan} transparent opacity={0.4} />
-    </mesh>
-  );
-}
-
-// ── Full multi-floor building ─────────────────────────────────────────────────
-function MultiFloorBuilding({
-  bld, onHover, onSelect,
-}: {
-  bld: BuildingDef;
-  onHover: (u: UnitInfo | null) => void;
-  onSelect: (u: UnitInfo | null) => void;
-}) {
-  const FLOOR_H = 1.1;
-  const unitW = bld.width / bld.unitsPerFloor;
-  const totalH = bld.floors * FLOOR_H;
-
-  // Pre-generate unit infos
-  const units: UnitInfo[] = useMemo(() => {
-    const arr: UnitInfo[] = [];
-    for (let f = 0; f < bld.floors; f++) {
-      for (let u = 0; u < bld.unitsPerFloor; u++) {
-        const ulpin = generateULPIN(bld.village, bld.parcelNo * 10 + u + 1, f, u + 1);
-        const coords = resolveCoordinates(bld.x + (u - bld.unitsPerFloor / 2) * unitW, bld.z, f);
-        const ownerIdx = (bld.parcelNo * bld.floors * bld.unitsPerFloor + f * bld.unitsPerFloor + u) % OWNERS.length;
-        const status = f === 0 && u === 0 && bld.isFraud ? 'conflict'
-          : f === bld.floors - 1 ? 'needs_review'
-          : bld.status;
-        arr.push({
-          ulpin, buildingId: bld.id, floor: f, unit: u + 1,
-          owner: OWNERS[ownerIdx],
-          status,
-          area: Math.round(unitW * bld.depth * 10.764), // sq ft
-          coords,
-        });
-      }
-    }
-    return arr;
-  }, [bld]);
-
-  return (
-    <group>
-      {/* Units */}
-      {units.map((ui) => (
-        <UnitBlock
-          key={ui.ulpin}
-          unitInfo={ui}
-          bx={bld.x} bz={bld.z}
-          floor={ui.floor} unitIdx={ui.unit}
-          unitW={unitW} depth={bld.depth}
-          floorH={FLOOR_H}
-          onHover={onHover}
-          onSelect={onSelect}
+    <group position={[b.x, 0, b.z]}>
+      {/* Main building */}
+      <mesh
+        ref={meshRef}
+        position={[0, b.height / 2, 0]}
+        castShadow
+        onPointerOver={(e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true); onHover(b); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { setHovered(false); onHover(null); document.body.style.cursor = 'default'; }}
+        onClick={(e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onClick(b); }}
+      >
+        <boxGeometry args={[b.width, b.height, b.depth]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.25}
+          roughness={0.2}
+          metalness={0.5}
+          transparent opacity={0.9}
         />
-      ))}
-
-      {/* Floor separator lines */}
-      {Array.from({ length: bld.floors + 1 }, (_, f) => (
-        <FloorLine key={f} x={bld.x} z={bld.z} width={bld.width} depth={bld.depth} y={f * FLOOR_H} />
-      ))}
-
-      {/* Roof glow */}
-      <mesh position={[bld.x, totalH + 0.06, bld.z]}>
-        <boxGeometry args={[bld.width + 0.2, 0.12, bld.depth + 0.2]} />
-        <meshBasicMaterial color={bld.blockchainLocked ? NEON.cyan : NEON.gray} transparent opacity={0.6} />
       </mesh>
 
-      {/* Neon edge frame */}
-      <lineSegments position={[bld.x, totalH / 2, bld.z]}>
-        <edgesGeometry args={[new THREE.BoxGeometry(bld.width + 0.05, totalH + 0.05, bld.depth + 0.05)]} />
-        <lineBasicMaterial color={STATUS_NEON[bld.status] || NEON.gray} transparent opacity={0.5} />
+      {/* Rooftop glow slab */}
+      <mesh position={[0, b.height + 0.06, 0]}>
+        <boxGeometry args={[b.width + 0.1, 0.1, b.depth + 0.1]} />
+        <meshBasicMaterial color={b.blockchainLocked ? NEON.cyan : b.color} transparent opacity={0.7} />
+      </mesh>
+
+      {/* Neon edge outline */}
+      <lineSegments position={[0, b.height / 2, 0]}>
+        <edgesGeometry args={[new THREE.BoxGeometry(b.width + 0.05, b.height + 0.05, b.depth + 0.05)]} />
+        <lineBasicMaterial color={b.isFraud ? NEON.red : b.color} transparent opacity={hovered ? 1 : 0.35} />
       </lineSegments>
 
-      {/* Blockchain beam */}
-      {bld.blockchainLocked && <BlockchainBeam x={bld.x} z={bld.z} height={totalH + 12} />}
-
-      {/* Fraud beacon */}
-      {bld.isFraud && <FraudBeacon x={bld.x} y={totalH + 1} z={bld.z} />}
-
-      {/* Building label */}
-      <Text
-        position={[bld.x, totalH + 1.5, bld.z]}
-        fontSize={0.35}
-        color={NEON.cyan}
-        anchorX="center"
-        anchorY="bottom"
-        outlineWidth={0.02}
-        outlineColor="#000"
-      >
-        {bld.label}
-      </Text>
-
-      {/* ULPIN label */}
-      <Text
-        position={[bld.x, totalH + 1.0, bld.z]}
-        fontSize={0.22}
-        color={NEON.green}
-        anchorX="center"
-        anchorY="bottom"
-        outlineWidth={0.01}
-        outlineColor="#000"
-      >
-        {generateULPIN(bld.village, bld.parcelNo)}
-      </Text>
-
-      {/* Ground footprint glow */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[bld.x, 0.03, bld.z]}>
-        <planeGeometry args={[bld.width + 0.5, bld.depth + 0.5]} />
-        <meshBasicMaterial color={STATUS_NEON[bld.status] || NEON.gray} transparent opacity={0.12} />
-      </mesh>
-    </group>
-  );
-}
-
-// ── Building dataset ──────────────────────────────────────────────────────────
-export const BUILDINGS: BuildingDef[] = [
-  // KIET campus
-  { id: 'kiet-main',   x: 0,    z: 0,    width: 9,  depth: 5, floors: 4, unitsPerFloor: 6, label: 'KIET — Main Block',    village: 'Muradnagar', parcelNo: 1,  district: 'Ghaziabad', landType: 'government',   status: 'validated',   blockchainLocked: true  },
-  { id: 'kiet-cs',     x: 14,   z: 0,    width: 7,  depth: 4, floors: 3, unitsPerFloor: 4, label: 'KIET — CS Block',      village: 'Muradnagar', parcelNo: 2,  district: 'Ghaziabad', landType: 'government',   status: 'validated',   blockchainLocked: true  },
-  { id: 'kiet-mech',   x: -14,  z: 2,    width: 8,  depth: 5, floors: 3, unitsPerFloor: 5, label: 'KIET — Mech Block',    village: 'Muradnagar', parcelNo: 3,  district: 'Ghaziabad', landType: 'government',   status: 'validated',   blockchainLocked: true  },
-  { id: 'kiet-hostel', x: 4,    z: -14,  width: 5,  depth: 8, floors: 8, unitsPerFloor: 3, label: 'KIET — Hostel Tower',  village: 'Muradnagar', parcelNo: 4,  district: 'Ghaziabad', landType: 'government',   status: 'validated',   blockchainLocked: true  },
-  { id: 'kiet-admin',  x: -7,   z: -11,  width: 4,  depth: 4, floors: 2, unitsPerFloor: 3, label: 'KIET — Admin Block',   village: 'Muradnagar', parcelNo: 5,  district: 'Ghaziabad', landType: 'government',   status: 'validated',   blockchainLocked: true  },
-  { id: 'kiet-lib',    x: 20,   z: -8,   width: 5,  depth: 5, floors: 3, unitsPerFloor: 4, label: 'KIET — Library',       village: 'Muradnagar', parcelNo: 6,  district: 'Ghaziabad', landType: 'government',   status: 'validated',   blockchainLocked: true  },
-  // Residential buildings
-  { id: 'res-loni-a',  x: -30,  z: 4,    width: 5,  depth: 4, floors: 5, unitsPerFloor: 4, label: 'Loni Heights A',       village: 'Loni',       parcelNo: 7,  district: 'Ghaziabad', landType: 'residential',  status: 'validated',   blockchainLocked: true  },
-  { id: 'res-loni-b',  x: -30,  z: 12,   width: 5,  depth: 4, floors: 4, unitsPerFloor: 4, label: 'Loni Heights B',       village: 'Loni',       parcelNo: 8,  district: 'Ghaziabad', landType: 'residential',  status: 'needs_review',blockchainLocked: false },
-  { id: 'com-rajnagar',x: -24,  z: 5,    width: 6,  depth: 5, floors: 6, unitsPerFloor: 5, label: 'Raj Nagar Plaza',      village: 'Raj Nagar',  parcelNo: 9,  district: 'Ghaziabad', landType: 'commercial',   status: 'conflict',    blockchainLocked: false, isFraud: true },
-  { id: 'res-vij',     x: -24,  z: 14,   width: 4,  depth: 3, floors: 3, unitsPerFloor: 3, label: 'Vijay Nagar Flats',    village: 'Vijay Nagar',parcelNo: 10, district: 'Ghaziabad', landType: 'residential',  status: 'validated',   blockchainLocked: true  },
-  { id: 'com-kavi',    x: 30,   z: 5,    width: 7,  depth: 4, floors: 7, unitsPerFloor: 4, label: 'Kavi Nagar Tower',     village: 'Kavi Nagar', parcelNo: 11, district: 'Ghaziabad', landType: 'commercial',   status: 'validated',   blockchainLocked: true  },
-  { id: 'res-indira',  x: 30,   z: 14,   width: 5,  depth: 4, floors: 4, unitsPerFloor: 3, label: 'Indirapuram Residency',village: 'Indirapuram',parcelNo: 12, district: 'Ghaziabad', landType: 'residential',  status: 'needs_review',blockchainLocked: false },
-  { id: 'com-vaishali',x: 30,   z: -6,   width: 6,  depth: 4, floors: 9, unitsPerFloor: 5, label: 'Vaishali Business Hub', village: 'Vaishali',  parcelNo: 13, district: 'Ghaziabad', landType: 'commercial',   status: 'validated',   blockchainLocked: true  },
-  { id: 'res-shalimar',x: -30,  z: -6,   width: 5,  depth: 4, floors: 4, unitsPerFloor: 3, label: 'Shalimar Garden Apts', village: 'Shalimar Garden', parcelNo: 14, district: 'Ghaziabad', landType: 'residential', status: 'pending', blockchainLocked: false },
-  { id: 'ind-tronica', x: 0,    z: 24,   width: 12, depth: 6, floors: 3, unitsPerFloor: 6, label: 'Tronica Industrial Zone',village: 'Tronica City', parcelNo: 15, district: 'Ghaziabad', landType: 'industrial', status: 'validated', blockchainLocked: true  },
-  { id: 'res-arthala', x: -20,  z: 22,   width: 4,  depth: 3, floors: 5, unitsPerFloor: 3, label: 'Arthala Residency',    village: 'Arthala',    parcelNo: 16, district: 'Ghaziabad', landType: 'residential',  status: 'needs_review',blockchainLocked: false, isFraud: true },
-];
-
-// ── Roads ─────────────────────────────────────────────────────────────────────
-function Roads() {
-  const roadColor = '#0a1628';
-  const lineColor = NEON.cyan;
-  return (
-    <group position={[0, 0.01, 0]}>
-      {/* Main roads */}
-      {[{ pos: [0, 0, 0] as [number,number,number], size: [120, 0.02, 2.5] as [number,number,number] },
-        { pos: [0, 0, 0] as [number,number,number], size: [2.5, 0.02, 120] as [number,number,number] },
-        { pos: [-17, 0, 0] as [number,number,number], size: [0.02, 0.02, 120] as [number,number,number] },
-        { pos: [17, 0, 0] as [number,number,number],  size: [0.02, 0.02, 120] as [number,number,number] },
-      ].map((r, i) => (
-        <mesh key={i} position={r.pos}>
-          <boxGeometry args={r.size} />
-          <meshBasicMaterial color={i < 2 ? roadColor : lineColor} transparent opacity={i < 2 ? 1 : 0.3} />
+      {/* Floor lines */}
+      {b.floors > 1 && Array.from({ length: b.floors - 1 }, (_, f) => (
+        <mesh key={f} position={[0, (f + 1) * (b.height / b.floors), 0]}>
+          <boxGeometry args={[b.width + 0.05, 0.04, b.depth + 0.05]} />
+          <meshBasicMaterial color={b.color} transparent opacity={0.2} />
         </mesh>
       ))}
+
+      {/* Ground halo */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <planeGeometry args={[b.width + 1, b.depth + 1]} />
+        <meshBasicMaterial color={b.color} transparent opacity={0.07} />
+      </mesh>
+
+      {/* Fraud pulsing ring */}
+      {b.isFraud && <FraudRing height={b.height} />}
+
+      {/* Blockchain vertical beam */}
+      {b.blockchainLocked && <ChainBeam height={b.height} />}
     </group>
   );
 }
 
-// ── Coordinate HUD (HTML overlay inside Canvas) ───────────────────────────────
-function CoordHUD({ hovered }: { hovered: UnitInfo | null }) {
-  const { camera } = useThree();
-  const [camPos, setCamPos] = useState({ x: 0, y: 0, z: 0 });
-
-  useFrame(() => {
-    setCamPos({ x: +camera.position.x.toFixed(1), y: +camera.position.y.toFixed(1), z: +camera.position.z.toFixed(1) });
+function FraudRing({ height }: { height: number }) {
+  const ref = useRef<THREE.Mesh>(null!);
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    const t = clock.elapsedTime % 1.5;
+    ref.current.scale.setScalar(1 + t * 1.2);
+    (ref.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.7 - t * 0.5);
   });
+  return (
+    <mesh ref={ref} position={[0, height + 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[0.6, 0.8, 32]} />
+      <meshBasicMaterial color={NEON.red} transparent opacity={0.7} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
 
-  const coords = hovered?.coords ?? resolveCoordinates(0, 0, 0);
+function ChainBeam({ height }: { height: number }) {
+  const ref = useRef<THREE.Mesh>(null!);
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    (ref.current.material as THREE.MeshBasicMaterial).opacity =
+      0.08 + Math.abs(Math.sin(clock.elapsedTime * 1.5)) * 0.18;
+  });
+  return (
+    <mesh ref={ref} position={[0, height / 2 + 4, 0]}>
+      <cylinderGeometry args={[0.05, 0.05, height + 8, 6]} />
+      <meshBasicMaterial color={NEON.cyan} transparent opacity={0.15} />
+    </mesh>
+  );
+}
+
+// ── District label ─────────────────────────────────────────────────────────────
+function DistrictLabel({ d }: { d: District }) {
+  const maxH = d.heightRange[1];
+  return (
+    <Text
+      position={[d.cx, maxH + 4, d.cz]}
+      fontSize={1.4}
+      color={d.color}
+      anchorX="center" anchorY="middle"
+      outlineWidth={0.04} outlineColor="#000000"
+    >
+      {d.name.toUpperCase()}
+    </Text>
+  );
+}
+
+// ── Road network ──────────────────────────────────────────────────────────────
+function Roads() {
+  const roads = useMemo(() => {
+    const r: { pos: [number,number,number]; size: [number,number,number] }[] = [];
+    // Main arterials
+    for (const off of [-42,-21,0,21,42]) {
+      r.push({ pos:[off, 0.01, 0], size:[0.8, 0.02, 150] });
+      r.push({ pos:[0, 0.01, off], size:[150, 0.02, 0.8] });
+    }
+    return r;
+  }, []);
 
   return (
-    <Html fullscreen zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
-      <div style={{
-        position: 'absolute', bottom: 16, right: 16,
-        fontFamily: "'JetBrains Mono', monospace",
-        fontSize: 11, color: NEON.cyan, background: 'rgba(0,0,0,0.75)',
-        border: `1px solid ${NEON.cyan}33`, borderRadius: 8,
-        padding: '10px 14px', lineHeight: 1.8, minWidth: 260,
-        backdropFilter: 'blur(8px)',
-      }}>
-        <div style={{ color: NEON.green, fontWeight: 700, marginBottom: 4 }}>◈ COORDINATE SYSTEM</div>
-        <div>LAT &nbsp;&nbsp;{coords.lat.toFixed(6)}° N</div>
-        <div>LNG &nbsp;&nbsp;{coords.lng.toFixed(6)}° E</div>
-        <div>ELEV &nbsp;{coords.elevationMSL.toFixed(1)} m MSL</div>
-        <div style={{ marginTop: 6, color: NEON.purple, fontWeight: 600 }}>⟨ VECTOR SPACE ⟩</div>
-        <div>x: {coords.vectorSpace.x}</div>
-        <div>y: {coords.vectorSpace.y}</div>
-        <div>z: {coords.vectorSpace.z}</div>
-        {hovered && (
-          <>
-            <div style={{ marginTop: 6, borderTop: `1px solid ${NEON.cyan}33`, paddingTop: 6, color: NEON.yellow }}>
-              ◉ FLOOR {hovered.floor} · UNIT {hovered.unit}
-            </div>
-            <div style={{ color: NEON.green, fontSize: 9, wordBreak: 'break-all' }}>{hovered.ulpin}</div>
-          </>
-        )}
-      </div>
-    </Html>
+    <>
+      {roads.map((r, i) => (
+        <mesh key={i} position={r.pos}>
+          <boxGeometry args={r.size} />
+          <meshBasicMaterial color="#050e1a" />
+        </mesh>
+      ))}
+      {/* Road centre lines */}
+      {[-42,-21,0,21,42].map(off => (
+        <group key={off}>
+          <mesh position={[off, 0.012, 0]}>
+            <boxGeometry args={[0.08, 0.01, 150]} />
+            <meshBasicMaterial color={NEON.cyan} transparent opacity={0.15} />
+          </mesh>
+          <mesh position={[0, 0.012, off]}>
+            <boxGeometry args={[150, 0.01, 0.08]} />
+            <meshBasicMaterial color={NEON.cyan} transparent opacity={0.15} />
+          </mesh>
+        </group>
+      ))}
+    </>
+  );
+}
+
+// ── Satellite ground ──────────────────────────────────────────────────────────
+function SatGround() {
+  const tex = useMemo(() => {
+    const size = 2048;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const ctx = c.getContext('2d')!;
+
+    // Base dark
+    ctx.fillStyle = '#010a14';
+    ctx.fillRect(0, 0, size, size);
+
+    // Agricultural patches (seeded random)
+    const rng = seededRng(77);
+    for (let i = 0; i < 25; i++) {
+      const x = rng() * size, y = rng() * size;
+      const w = 40 + rng() * 120, h = 40 + rng() * 100;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(w, h));
+      g.addColorStop(0, `rgba(10,50,10,${0.4 + rng() * 0.3})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - w, y - h, w * 2, h * 2);
+    }
+
+    // City block density (bright patches)
+    for (let i = 0; i < 12; i++) {
+      const x = rng() * size, y = rng() * size, r = 60 + rng() * 100;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, 'rgba(20,30,60,0.6)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+
+    // Micro neon grid
+    ctx.strokeStyle = 'rgba(0,255,240,0.03)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < size; i += 32) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
+    }
+
+    return new THREE.CanvasTexture(c);
+  }, []);
+
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+      <planeGeometry args={[160, 160]} />
+      <meshStandardMaterial map={tex} roughness={1} />
+    </mesh>
+  );
+}
+
+// ── Animated neon grid ─────────────────────────────────────────────────────────
+function NeonGrid() {
+  const ref = useRef<THREE.GridHelper>(null!);
+  useFrame(({ clock }) => {
+    if (ref.current) {
+      (ref.current.material as THREE.Material & { opacity: number }).opacity =
+        0.08 + Math.sin(clock.elapsedTime * 0.4) * 0.04;
+    }
+  });
+  return (
+    <gridHelper
+      ref={ref}
+      args={[160, 53, NEON.cyan, NEON.grid]}
+      position={[0, 0.03, 0]}
+    />
+  );
+}
+
+// ── Auto-orbit camera controller ──────────────────────────────────────────────
+function AutoOrbit({ active }: { active: boolean }) {
+  const orbitRef = useRef<any>(null);
+  useFrame(({ clock }) => {
+    if (!active || !orbitRef.current) return;
+    const t = clock.elapsedTime * 0.04;
+    orbitRef.current.object.position.x = Math.sin(t) * 80;
+    orbitRef.current.object.position.z = Math.cos(t) * 80;
+    orbitRef.current.object.position.y = 40 + Math.sin(clock.elapsedTime * 0.015) * 15;
+    orbitRef.current.update();
+  });
+  return (
+    <OrbitControls
+      ref={orbitRef}
+      enablePan enableZoom enableRotate
+      minDistance={6} maxDistance={140}
+      maxPolarAngle={Math.PI / 2.05}
+      target={[0, 4, 0]}
+      dampingFactor={0.06} enableDamping
+    />
   );
 }
 
 // ── Hover tooltip ─────────────────────────────────────────────────────────────
-function UnitTooltip({ unit, bld }: { unit: UnitInfo; bld: BuildingDef }) {
-  const floorH = 1.1;
+function BuildingTooltip({ b }: { b: CityBuilding }) {
+  const coords = resolveCoordinates(b.x, b.z, 0);
   return (
-    <Html
-      position={[bld.x, (unit.floor + 1) * floorH + 1, bld.z]}
-      center distanceFactor={18} zIndexRange={[100, 0]}
-    >
+    <Html position={[b.x, b.height + 1.5, b.z]} center distanceFactor={22} zIndexRange={[100, 0]}>
       <div style={{
-        fontFamily: "'JetBrains Mono', monospace",
-        background: 'rgba(0,0,0,0.92)', color: '#fff',
-        border: `1px solid ${NEON.cyan}`, borderRadius: 8, padding: '10px 14px',
-        fontSize: 10, minWidth: 220, pointerEvents: 'none',
-        boxShadow: `0 0 20px ${NEON.cyan}44`,
+        fontFamily: "'JetBrains Mono','Courier New',monospace",
+        background: 'rgba(0,0,8,0.95)', color: '#fff',
+        border: `1px solid ${b.color}`, borderRadius: 8,
+        padding: '8px 12px', fontSize: 10, minWidth: 190,
+        pointerEvents: 'none', boxShadow: `0 0 16px ${b.color}44`,
       }}>
-        <div style={{ color: NEON.cyan, fontWeight: 700, marginBottom: 4 }}>{bld.label}</div>
-        <div style={{ color: NEON.green, fontSize: 9, marginBottom: 6, wordBreak: 'break-all' }}>{unit.ulpin}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 8px', color: '#aaa' }}>
-          <span>Owner</span><span style={{ color: '#fff' }}>{unit.owner}</span>
-          <span>Floor</span><span style={{ color: '#fff' }}>{unit.floor === 0 ? 'G' : `F${unit.floor}`}</span>
-          <span>Unit</span><span style={{ color: '#fff' }}>U{unit.unit}</span>
-          <span>Area</span><span style={{ color: '#fff' }}>{unit.area} sq ft</span>
-          <span>Status</span><span style={{ color: STATUS_NEON[unit.status] }}>{unit.status.replace('_', ' ')}</span>
-          <span>Lat</span><span style={{ color: '#fff' }}>{unit.coords.lat.toFixed(5)}</span>
-          <span>Lng</span><span style={{ color: '#fff' }}>{unit.coords.lng.toFixed(5)}</span>
-          <span>Elev</span><span style={{ color: NEON.purple }}>{unit.coords.elevationMSL.toFixed(1)}m</span>
+        <div style={{ color: b.color, fontWeight: 700, marginBottom: 4 }}>{b.districtName}</div>
+        <div style={{ color: NEON.green, fontSize: 9, marginBottom: 6, wordBreak: 'break-all' }}>{b.ulpin}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 8px', color: '#888' }}>
+          <span>Owner</span><span style={{ color: '#eee' }}>{b.owner}</span>
+          <span>Floors</span><span style={{ color: '#eee' }}>{b.floors}</span>
+          <span>Height</span><span style={{ color: '#eee' }}>{(b.height * 3).toFixed(0)}m</span>
+          <span>Type</span><span style={{ color: b.color }}>{b.landType}</span>
+          <span>Status</span><span style={{ color: STATUS_GLOW[b.status] }}>{b.status.replace('_',' ')}</span>
+          <span>Elev</span><span style={{ color: NEON.purple }}>{coords.elevationMSL.toFixed(0)}m MSL</span>
         </div>
+        {b.isFraud && <div style={{ marginTop: 6, color: NEON.red, fontSize: 9, fontWeight: 700 }}>⚠ FRAUD FLAG ACTIVE</div>}
       </div>
     </Html>
   );
 }
 
-// ── Scene ─────────────────────────────────────────────────────────────────────
-function Scene({ onSelect }: { onSelect: (u: UnitInfo | null) => void }) {
-  const [hovered, setHovered] = useState<UnitInfo | null>(null);
-  const hoveredBld = hovered ? BUILDINGS.find(b => b.id === hovered.buildingId) : null;
+// ── Main scene ────────────────────────────────────────────────────────────────
+function CityScene({ onSelect, autoRotate }: {
+  onSelect: (b: CityBuilding | null) => void;
+  autoRotate: boolean;
+}) {
+  const [hovered, setHovered] = useState<CityBuilding | null>(null);
 
-  const satTex = useMemo(() => createSatelliteTexture(), []);
+  const handleHover = useCallback((b: CityBuilding | null) => setHovered(b), []);
+  const handleClick = useCallback((b: CityBuilding) => onSelect(b), [onSelect]);
 
   return (
     <>
-      <Stars radius={300} depth={80} count={2000} factor={4} fade />
+      <color attach="background" args={['#000008']} />
+      <fog attach="fog" args={['#000212', 80, 160]} />
+      <Stars radius={250} depth={100} count={3000} factor={5} fade />
 
       {/* Lighting */}
-      <ambientLight intensity={0.2} />
-      <pointLight position={[0, 60, 0]} intensity={2} color={NEON.cyan} distance={200} />
-      <pointLight position={[-40, 20, -40]} intensity={1} color={NEON.purple} distance={120} />
-      <pointLight position={[40, 20, 40]} intensity={0.8} color={NEON.green} distance={120} />
-      <directionalLight position={[50, 80, 50]} intensity={0.6} castShadow />
+      <ambientLight intensity={0.15} />
+      <pointLight position={[0, 80, 0]} intensity={3} color={NEON.cyan} distance={220} decay={1.5} />
+      <pointLight position={[-50, 30, -50]} intensity={1.5} color={NEON.purple} distance={130} />
+      <pointLight position={[50, 30, 50]} intensity={1.5} color={NEON.blue} distance={130} />
+      <pointLight position={[50, 20, -50]} intensity={1} color={NEON.orange} distance={100} />
+      <directionalLight position={[40, 80, 40]} intensity={0.4} castShadow />
 
-      {/* Satellite ground */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[200, 200]} />
-        <meshStandardMaterial map={satTex} roughness={1} />
-      </mesh>
-
+      <SatGround />
       <NeonGrid />
       <Roads />
+      <TrafficDots />
 
       {/* City title */}
-      <Text position={[0, 18, -30]} fontSize={2.5} color={NEON.cyan}
-        anchorX="center" anchorY="middle"
-        outlineWidth={0.06} outlineColor="#000">
-        GHAZIABAD DLRMS
+      <Text position={[0, 38, -60]} fontSize={4} color={NEON.cyan}
+        anchorX="center" anchorY="middle" outlineWidth={0.12} outlineColor="#000000">
+        GHAZIABAD
       </Text>
-      <Text position={[0, 15.5, -30]} fontSize={0.9} color={NEON.green}
-        anchorX="center" anchorY="middle">
-        ULPIN · 3D CADASTRAL REGISTRY · UTTAR PRADESH
+      <Text position={[0, 33, -60]} fontSize={1.6} color={NEON.green}
+        anchorX="center" anchorY="middle" outlineWidth={0.05} outlineColor="#000000">
+        DLRMS · CADASTRAL REGISTRY · UTTAR PRADESH
       </Text>
 
-      {/* All multi-floor buildings */}
-      {BUILDINGS.map(bld => (
-        <MultiFloorBuilding key={bld.id} bld={bld}
-          onHover={setHovered} onSelect={onSelect} />
+      {/* District labels */}
+      {DISTRICTS.filter(d => d.type !== 'agricultural').map(d => (
+        <DistrictLabel key={d.id} d={d} />
       ))}
 
-      {/* Tooltip */}
-      {hovered && hoveredBld && <UnitTooltip unit={hovered} bld={hoveredBld} />}
+      {/* All buildings */}
+      {CITY_BUILDINGS.map(b => (
+        <Building key={b.id} b={b} onHover={handleHover} onClick={handleClick} />
+      ))}
 
-      {/* Coordinate HUD */}
-      <CoordHUD hovered={hovered} />
+      {/* Hover tooltip */}
+      {hovered && <BuildingTooltip b={hovered} />}
 
-      <PerspectiveCamera makeDefault position={[50, 40, 60]} fov={50} />
-      <OrbitControls enablePan enableZoom enableRotate
-        minDistance={5} maxDistance={130}
-        maxPolarAngle={Math.PI / 2.05}
-        target={[0, 4, 0]} dampingFactor={0.07} enableDamping />
+      <PerspectiveCamera makeDefault position={[70, 50, 70]} fov={52} />
+      <AutoOrbit active={autoRotate} />
     </>
   );
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
-export function CityMap3D({ onSelect }: { onSelect?: (u: UnitInfo | null) => void }) {
+export function CityMap3D({ onSelect, autoRotate = false }: {
+  onSelect?: (b: CityBuilding | null) => void;
+  autoRotate?: boolean;
+}) {
   return (
-    <Canvas shadows gl={{ antialias: true }} style={{ background: '#000008' }}
+    <Canvas
+      shadows
+      gl={{ antialias: true, powerPreference: 'high-performance' }}
       onCreated={({ gl }) => {
         gl.shadowMap.enabled = true;
         gl.shadowMap.type = THREE.PCFSoftShadowMap;
         gl.toneMapping = THREE.ACESFilmicToneMapping;
-        gl.toneMappingExposure = 1.2;
+        gl.toneMappingExposure = 1.4;
       }}
     >
-      <Scene onSelect={onSelect || (() => {})} />
+      <CityScene onSelect={onSelect || (() => {})} autoRotate={autoRotate} />
     </Canvas>
   );
 }
 
-export { STATUS_NEON, NEON };
+export { STATUS_GLOW, DISTRICTS };
