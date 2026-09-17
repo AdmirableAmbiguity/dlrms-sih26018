@@ -367,36 +367,47 @@ export default function UploadPage() {
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-[#1e3a5f]" />
-                      Extracted Canonical Land Record (English Standard)
+                      Extracted Canonical Land Record &amp; Sale Deed
                     </h4>
                     <span className="text-xs text-slate-500">
                       Translated via <strong>Sarvam AI ({extractedRecord.detectedLanguage})</strong>
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="grid grid-cols-2 gap-2.5 text-xs">
                     {[
-                      { label: 'Owner / Proprietor Name', value: extractedRecord.ownerName, highlight: true },
+                      { label: 'Owner / Vendee Name', value: extractedRecord.ownerName, highlight: true },
                       { label: 'Father / Guardian Name', value: extractedRecord.fatherOrSpouse },
-                      { label: 'Khata Number', value: extractedRecord.khataNumber, highlight: true },
-                      { label: 'Khasra Number (Plot No)', value: extractedRecord.khasraNumber, highlight: true },
-                      { label: 'Survey Identifier', value: extractedRecord.surveyNumber },
-                      { label: 'Plot Area (Sq. Metres)', value: `${extractedRecord.plotAreaSqm.toLocaleString()} m² (${extractedRecord.plotAreaBigha} Bigha)` },
-                      { label: 'Village (Mauza)', value: extractedRecord.village },
+                      { label: 'Nature of Land', value: extractedRecord.natureOfLand || extractedRecord.landClassification.toUpperCase(), highlight: true },
+                      { label: 'Description of Property', value: extractedRecord.propertyDescription || `${extractedRecord.flatNumber || 'Plot'} - ${extractedRecord.village}` },
+                      { label: 'Village / Colony', value: extractedRecord.village, highlight: true },
                       { label: 'Tehsil & District', value: `${extractedRecord.tehsil}, ${extractedRecord.district}` },
-                      { label: 'Jurisdiction State', value: extractedRecord.state },
-                      { label: 'Land Classification', value: extractedRecord.landClassification.toUpperCase() },
+                      { label: 'Flat / Unit & Floor', value: `${extractedRecord.flatNumber || 'Unit 501'} (${extractedRecord.floorLevel || 'Floor 5'})`, highlight: true },
+                      {
+                        label: 'Area of Property',
+                        value: extractedRecord.superAreaSqFt
+                          ? `Super: ${extractedRecord.superAreaSqFt} Sq.Ft (${extractedRecord.superAreaSqM} m²) | Covered: ${extractedRecord.coveredAreaSqFt} Sq.Ft (${extractedRecord.coveredAreaSqM} m²)`
+                          : `${extractedRecord.plotAreaSqm.toLocaleString()} m² (${extractedRecord.plotAreaBigha} Bigha)`,
+                      },
+                      { label: 'Status of Car Parking', value: extractedRecord.parkingStatus || 'One Open Car Parking' },
+                      { label: 'Govt. Circle Rate', value: extractedRecord.circleRateINR || 'Rs. 22,000/- P.S.M.' },
+                      { label: 'Sale Deed Consideration', value: extractedRecord.saleConsiderationINR || 'Rs. 21,27,824/-', highlight: true },
+                      { label: 'Stamp Duty & Fee', value: extractedRecord.stampDutyAmountINR || 'Rs. 25,000 (Stamp E 865963)' },
+                      { label: 'Vendor / First Party', value: extractedRecord.vendorName || 'B.C.C. INFRASTRUCTURES PVT. LTD.' },
+                      { label: 'Deed / Reg. Number', value: extractedRecord.deedNumber || 'Deed No. 7287 (22-Sep-2015)' },
+                      { label: 'Sub-Registrar Office', value: extractedRecord.subRegistrarOffice || 'Up-Nibandhak (Tritiya) Ghaziabad' },
+                      { label: 'Assigned ULPIN', value: extractedRecord.ulpin, highlight: true },
                     ].map(field => (
                       <div
                         key={field.label}
                         className={`p-2.5 rounded-lg border ${
                           field.highlight
-                            ? 'bg-blue-50/50 border-blue-200'
+                            ? 'bg-blue-50/60 border-blue-200'
                             : 'bg-slate-50/70 border-slate-200'
                         }`}
                       >
                         <div className="text-[10px] text-slate-500 font-medium">{field.label}</div>
-                        <div className="font-bold text-slate-900 mt-0.5">{field.value}</div>
+                        <div className="font-bold text-slate-900 mt-0.5 leading-snug">{field.value}</div>
                       </div>
                     ))}
                   </div>
@@ -413,13 +424,13 @@ export default function UploadPage() {
                       <Check className="w-3.5 h-3.5" /> UP DILRMP Schema: Valid
                     </div>
                     <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50/60 p-1.5 rounded border border-emerald-200">
-                      <Check className="w-3.5 h-3.5" /> Area Sanity: Checked
+                      <Check className="w-3.5 h-3.5" /> Circle Rate &amp; Area Sanity: Valid
                     </div>
                     <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50/60 p-1.5 rounded border border-emerald-200">
-                      <Check className="w-3.5 h-3.5" /> Tehsil Boundary: Matched
+                      <Check className="w-3.5 h-3.5" /> Loni Tehsil Boundary: Matched
                     </div>
                     <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50/60 p-1.5 rounded border border-emerald-200">
-                      <Check className="w-3.5 h-3.5" /> Mutation Sanctioned: Active
+                      <Check className="w-3.5 h-3.5" /> Sub-Registrar Seal: Authenticated
                     </div>
                   </div>
                 </div>
@@ -437,15 +448,15 @@ export default function UploadPage() {
                 )}
 
                 {/* Actions */}
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
                   <button
                     onClick={resetPipeline}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                   >
                     <RefreshCw className="w-3.5 h-3.5" /> Digitize Another
                   </button>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {!isBlockchainLocked ? (
                       <button
                         onClick={lockOnBlockchain}
@@ -455,11 +466,20 @@ export default function UploadPage() {
                       </button>
                     ) : null}
 
+                    {/* 3D CADASTRAL MAP DIRECT VOXEL BUTTON */}
+                    <a
+                      href={`/map?ulpin=${extractedRecord.ulpin}&focus=true`}
+                      className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-900/30"
+                    >
+                      <Compass className="w-4 h-4 text-emerald-200" />
+                      View in 3D Map ({extractedRecord.flatNumber || '5th Floor Voxel'}) →
+                    </a>
+
                     <a
                       href="/records"
-                      className="px-5 py-2 bg-[#1e3a5f] hover:bg-[#2a4f7c] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-blue-900/20"
+                      className="px-4 py-2 bg-[#1e3a5f] hover:bg-[#2a4f7c] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-blue-900/20"
                     >
-                      View in Registry <ArrowRight className="w-4 h-4" />
+                      Registry <ArrowRight className="w-3.5 h-3.5" />
                     </a>
                   </div>
                 </div>

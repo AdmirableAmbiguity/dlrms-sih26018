@@ -1,4 +1,5 @@
-import { useState, Suspense, useMemo } from 'react';
+import { useState, Suspense, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Shield, AlertTriangle, Layers, Search, Copy, Check, Play, Pause,
@@ -410,9 +411,35 @@ function CadastralSearchBar({
 
 // ── Main Page Component ───────────────────────────────────────────────────────
 export default function MapPage() {
+  const [searchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<'3d' | 'gis'>('3d');
   const [selectedUnit, setSelectedUnit] = useState<ApartmentRoomUnit | null>(null);
   const [autoRotate, setAutoRotate] = useState(true);
+
+  // Auto-focus unit if passed in URL query e.g. /map?ulpin=UP091201NIST-TWA2-F05-U501
+  useEffect(() => {
+    const qUlpin = searchParams.get('ulpin');
+    const qBuilding = searchParams.get('building');
+    if (qUlpin) {
+      const match = ALL_UNITS.find(
+        u =>
+          u.ulpin.toLowerCase() === qUlpin.toLowerCase() ||
+          u.ulpin.toLowerCase().includes(qUlpin.toLowerCase()) ||
+          u.unitCode.toLowerCase().includes(qUlpin.toLowerCase())
+      );
+      if (match) {
+        setSelectedUnit(match);
+        setAutoRotate(false);
+        toast.success(`Focused on 3D Voxel: ${match.unitCode} (${match.buildingName})`);
+      }
+    } else if (qBuilding) {
+      const match = ALL_UNITS.find(u => u.buildingId === qBuilding || u.buildingName.toLowerCase().includes(qBuilding.toLowerCase()));
+      if (match) {
+        setSelectedUnit(match);
+        setAutoRotate(false);
+      }
+    }
+  }, [searchParams]);
 
   // Compute live statistics
   const stats = useMemo(() => {

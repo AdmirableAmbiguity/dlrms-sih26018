@@ -178,10 +178,331 @@ function pickRandom<T>(arr: T[], rng: () => number): T {
   return arr[Math.floor(rng() * arr.length)];
 }
 
+// ── FEATURED REAL DEED 1: Bharat City Phase-I (Tower A2 - Flat 501 on 5th Floor) ──
+function createBharatCityTowerA2(): CityBuildingComposite {
+  const bx = -6.0;
+  const bz = -6.0;
+  const bWidth = 3.6;
+  const bDepth = 3.6;
+  const totalFloors = 5;
+  const buildingName = 'Bharat City Phase-I (Tower A2)';
+  const village = 'Nistauli (Bharat City Phase-I)';
+  const districtName = 'Loni Industrial Gateway';
+  const units: ApartmentRoomUnit[] = [];
+
+  const randomOwners = [
+    { name: 'Dinesh Sharma', father: 'S/o M.L. Sharma', val: '18,50,000' },
+    { name: 'Anjali Gupta', father: 'W/o P.K. Gupta', val: '18,80,000' },
+    { name: 'Ramesh Verma', father: 'S/o K.C. Verma', val: '19,20,000' },
+    { name: 'Meera Singh', father: 'W/o Rajesh Singh', val: '19,50,000' },
+    { name: 'Sunil Kumar Saxena', father: 'S/o B.B. Saxena', val: '19,80,000' },
+    { name: 'Pooja Agarwal', father: 'W/o Amit Agarwal', val: '20,10,000' },
+    { name: 'Vikram Singh Rawat', father: 'S/o S.S. Rawat', val: '20,50,000' },
+    { name: 'Harish Chandra Dubey', father: 'S/o N.K. Dubey', val: '20,80,000' },
+  ];
+
+  let ownerIdx = 0;
+
+  // Floors 0 to 3: Procedural units for starting 4 floors
+  for (let f = 0; f < 4; f++) {
+    const floorLabel = f === 0 ? 'Ground Floor' : `Floor ${f}`;
+    const floorY = f * SCENE_FLOOR_H + SCENE_FLOOR_H / 2;
+    const floorMSL = BASE_GROUND_MSL + f * FLOOR_HEIGHT_M;
+    const floorAGL = f * FLOOR_HEIGHT_M;
+
+    for (let u = 1; u <= 2; u++) {
+      const uOffset = u === 1 ? -0.85 : 0.85;
+      const unitCode = f === 0 ? `Flat G-0${u}` : `Flat ${f}0${u}`;
+      const owner = randomOwners[ownerIdx % randomOwners.length];
+      ownerIdx++;
+
+      units.push({
+        ulpin: `UP091201NIST-TWA2-F0${f + 1}-U0${u}`,
+        buildingId: 'bld-bharat-city-a2',
+        buildingName,
+        districtName,
+        village,
+        floorNumber: f,
+        floorLabel,
+        totalBuildingFloors: totalFloors,
+        unitCode,
+        unitType: '2BHK Standard Apartment',
+        roomConfig: '2 Bed + 2 Bath + Balcony',
+        carpetAreaSqFt: 750 + f * 20,
+        carpetAreaSqM: +( (750 + f * 20) * 0.092903 ).toFixed(1),
+        superBuiltUpSqFt: 920 + f * 20,
+        ownerName: owner.name,
+        fatherOrSpouse: owner.father,
+        aadhaarVerified: true,
+        ownershipShare: 'Sole Owner (100%)',
+        khataNumber: `KH-0401`,
+        khasraNumber: `501/${f + 1}`,
+        surveyNumber: `SY-GZB-NIST-7287-F0${f + 1}`,
+        propertyTaxId: `PT-UP-NIST-F0${f + 1}U0${u}`,
+        valuationINR: `₹${owner.val}`,
+        registrationDate: '2015-09-22',
+        mutationDate: '2015-09-22',
+        status: 'validated',
+        blockchainLocked: true,
+        txHash: '0x8f72a1e94c25b7e950294da18b45610ec8724b12',
+        isFraud: false,
+        coordinates: {
+          latitude: 28.71825,
+          longitude: 77.29412,
+          elevationMSL: +(floorMSL).toFixed(1),
+          floorHeightAGL: +(floorAGL).toFixed(1),
+          vectorSpace: { x: 77.29412, y: +(floorMSL).toFixed(1), z: 28.71825 },
+        },
+        meshPosition: [bx + uOffset, floorY, bz],
+        meshDimensions: [1.6, SCENE_FLOOR_H - 0.12, bDepth - 0.2],
+        color: NEON.blue,
+      });
+    }
+  }
+
+  // ── Floor 4 (5th Floor / Floor 5): HIGHLIGHTED REAL FLAT NO. 501 ──
+  const f5Y = 4 * SCENE_FLOOR_H + SCENE_FLOOR_H / 2;
+  const f5MSL = BASE_GROUND_MSL + 4 * FLOOR_HEIGHT_M;
+  const f5AGL = 4 * FLOOR_HEIGHT_M;
+
+  // Flat 501 (Left Voxel)
+  units.push({
+    ulpin: 'UP091201NIST-TWA2-F05-U501',
+    buildingId: 'bld-bharat-city-a2',
+    buildingName,
+    districtName,
+    village,
+    floorNumber: 4,
+    floorLabel: '5th Floor (Floor 5)',
+    totalBuildingFloors: totalFloors,
+    unitCode: 'Flat No. 501 (5th Floor)',
+    unitType: 'Residential Flat (without roof right)',
+    roomConfig: 'Super Area 965 Sq. Ft. · Covered 772 Sq. Ft. · 1 Open Car Parking',
+    carpetAreaSqFt: 772,
+    carpetAreaSqM: 71.72,
+    superBuiltUpSqFt: 965,
+    ownerName: 'Saurabh Jaiswal',
+    fatherOrSpouse: 'S/o Subhash Chandra Jaiswal',
+    aadhaarVerified: true,
+    ownershipShare: 'Sole Owner (100%)',
+    khataNumber: 'KH-0401',
+    khasraNumber: '501/5',
+    surveyNumber: 'SY-GZB-NIST-7287-F05',
+    propertyTaxId: 'PT-UP-NIST-501',
+    valuationINR: '₹21,27,824 (Circle Rate: ₹22,000/sq.m)',
+    registrationDate: '2015-09-22 (Deed 7287)',
+    mutationDate: '2015-09-22',
+    status: 'validated',
+    blockchainLocked: true,
+    txHash: '0x8f72a1e94c25b7e950294da18b45610ec8724b12',
+    isFraud: false,
+    coordinates: {
+      latitude: 28.71825,
+      longitude: 77.29412,
+      elevationMSL: +(f5MSL).toFixed(1),
+      floorHeightAGL: +(f5AGL).toFixed(1),
+      vectorSpace: { x: 77.29412, y: +(f5MSL).toFixed(1), z: 28.71825 },
+    },
+    meshPosition: [bx - 0.85, f5Y, bz],
+    meshDimensions: [1.6, SCENE_FLOOR_H - 0.12, bDepth - 0.2],
+    color: NEON.green, // Glowing Green
+  });
+
+  // Flat 502 (Right Voxel)
+  units.push({
+    ulpin: 'UP091201NIST-TWA2-F05-U502',
+    buildingId: 'bld-bharat-city-a2',
+    buildingName,
+    districtName,
+    village,
+    floorNumber: 4,
+    floorLabel: '5th Floor (Floor 5)',
+    totalBuildingFloors: totalFloors,
+    unitCode: 'Flat No. 502 (5th Floor)',
+    unitType: 'Residential Flat (without roof right)',
+    roomConfig: 'Super Area 965 Sq. Ft. · Covered 772 Sq. Ft.',
+    carpetAreaSqFt: 772,
+    carpetAreaSqM: 71.72,
+    superBuiltUpSqFt: 965,
+    ownerName: 'Deepak Goel',
+    fatherOrSpouse: 'S/o Ramesh Goel',
+    aadhaarVerified: true,
+    ownershipShare: 'Sole Owner (100%)',
+    khataNumber: 'KH-0401',
+    khasraNumber: '501/5',
+    surveyNumber: 'SY-GZB-NIST-7287-F05-502',
+    propertyTaxId: 'PT-UP-NIST-502',
+    valuationINR: '₹21,27,824',
+    registrationDate: '2015-09-22',
+    mutationDate: '2015-09-22',
+    status: 'validated',
+    blockchainLocked: true,
+    txHash: '0x9a8f21b7c4d3e8c950294da18b45610ec8724b77',
+    isFraud: false,
+    coordinates: {
+      latitude: 28.71825,
+      longitude: 77.29412,
+      elevationMSL: +(f5MSL).toFixed(1),
+      floorHeightAGL: +(f5AGL).toFixed(1),
+      vectorSpace: { x: 77.29412, y: +(f5MSL).toFixed(1), z: 28.71825 },
+    },
+    meshPosition: [bx + 0.85, f5Y, bz],
+    meshDimensions: [1.6, SCENE_FLOOR_H - 0.12, bDepth - 0.2],
+    color: NEON.cyan,
+  });
+
+  return {
+    id: 'bld-bharat-city-a2',
+    name: buildingName,
+    districtName,
+    village,
+    x: bx,
+    z: bz,
+    width: bWidth,
+    depth: bDepth,
+    totalFloors: 5,
+    totalUnits: units.length,
+    units,
+    color: NEON.green,
+    blockchainLocked: true,
+    hasFraud: false,
+    status: 'validated',
+  };
+}
+
+// ── FEATURED REAL DEED 2: Shyam Park Extension (Plot D-14, Flat UG-04) ──
+function createShyamParkD14(): CityBuildingComposite {
+  const bx = 6.0;
+  const bz = -6.0;
+  const bWidth = 3.2;
+  const bDepth = 3.2;
+  const totalFloors = 4; // Stilt + 3
+  const buildingName = 'Plot No. D-14 (Stilt + 3 Storeyed Building)';
+  const village = 'Jagola (Shyam Park Extension)';
+  const districtName = 'Loni Industrial Gateway';
+  const units: ApartmentRoomUnit[] = [];
+
+  const floorLabels = ['Stilt / Parking', 'Upper Ground Floor', '1st Floor', '2nd Floor'];
+
+  for (let f = 0; f < totalFloors; f++) {
+    const floorY = f * SCENE_FLOOR_H + SCENE_FLOOR_H / 2;
+    const floorMSL = BASE_GROUND_MSL + f * FLOOR_HEIGHT_M;
+    const floorAGL = f * FLOOR_HEIGHT_M;
+
+    if (f === 1) {
+      // Upper Ground Floor - Flat UG-04
+      units.push({
+        ulpin: 'UP091201JAGOD14F00U04',
+        buildingId: 'bld-shyam-park-d14',
+        buildingName,
+        districtName,
+        village,
+        floorNumber: 1,
+        floorLabel: 'Upper Ground Floor (Stilt + 3)',
+        totalBuildingFloors: totalFloors,
+        unitCode: 'Flat No. U.G-04 (Upper Ground)',
+        unitType: 'Residential Flat (L.I.G) (without roof right)',
+        roomConfig: 'Covered Area 400 Sq. Ft. (37.16 Sq. m) · 40ft Wide Road · Scooter Parking',
+        carpetAreaSqFt: 400,
+        carpetAreaSqM: 37.16,
+        superBuiltUpSqFt: 400,
+        ownerName: 'Smt. Kalavati Singh Yadav',
+        fatherOrSpouse: 'W/o Balram Singh Yadav',
+        aadhaarVerified: true,
+        ownershipShare: 'Sole Owner (100%)',
+        khataNumber: 'KH-D14',
+        khasraNumber: 'D-14/UG04',
+        surveyNumber: 'SY-GZB-JAGO-3699-UG',
+        propertyTaxId: 'PT-UP-JAGO-UG04',
+        valuationINR: '₹16,50,000 (Circle: ₹45,000/sq.m)',
+        registrationDate: '2018-05-16 / 2026 (Deed 3699)',
+        mutationDate: '2018-05-16',
+        status: 'validated',
+        blockchainLocked: true,
+        txHash: '0x3c91e847da29b4e18f5039201485610ec8724b99',
+        isFraud: false,
+        coordinates: {
+          latitude: 28.7241,
+          longitude: 77.3112,
+          elevationMSL: +(floorMSL).toFixed(1),
+          floorHeightAGL: +(floorAGL).toFixed(1),
+          vectorSpace: { x: 77.3112, y: +(floorMSL).toFixed(1), z: 28.7241 },
+        },
+        meshPosition: [bx, floorY, bz],
+        meshDimensions: [bWidth - 0.2, SCENE_FLOOR_H - 0.12, bDepth - 0.2],
+        color: NEON.gold,
+      });
+    } else {
+      units.push({
+        ulpin: `UP091201JAGO-D14-F0${f}`,
+        buildingId: 'bld-shyam-park-d14',
+        buildingName,
+        districtName,
+        village,
+        floorNumber: f,
+        floorLabel: floorLabels[f],
+        totalBuildingFloors: totalFloors,
+        unitCode: f === 0 ? 'Stilt Parking Bay' : `Flat ${f}01`,
+        unitType: f === 0 ? 'Covered Stilt Parking' : 'Residential Floor Unit',
+        roomConfig: '400 Sq. Ft. Residential Space',
+        carpetAreaSqFt: 400,
+        carpetAreaSqM: 37.16,
+        superBuiltUpSqFt: 400,
+        ownerName: f === 0 ? 'Common Society Parking' : `Rakesh Jain S/o J.S. Jain`,
+        fatherOrSpouse: f === 0 ? 'Society Maintenance' : 'S/o J.S. Jain',
+        aadhaarVerified: true,
+        ownershipShare: 'Sole Owner (100%)',
+        khataNumber: 'KH-D14',
+        khasraNumber: `D-14/0${f}`,
+        surveyNumber: `SY-GZB-JAGO-3699-0${f}`,
+        propertyTaxId: `PT-UP-JAGO-0${f}`,
+        valuationINR: '₹16,50,000',
+        registrationDate: '2018-05-16',
+        mutationDate: '2018-05-16',
+        status: 'validated',
+        blockchainLocked: true,
+        txHash: '0x3c91e847da29b4e18f5039201485610ec8724b99',
+        isFraud: false,
+        coordinates: {
+          latitude: 28.7241,
+          longitude: 77.3112,
+          elevationMSL: +(floorMSL).toFixed(1),
+          floorHeightAGL: +(floorAGL).toFixed(1),
+          vectorSpace: { x: 77.3112, y: +(floorMSL).toFixed(1), z: 28.7241 },
+        },
+        meshPosition: [bx, floorY, bz],
+        meshDimensions: [bWidth - 0.2, SCENE_FLOOR_H - 0.12, bDepth - 0.2],
+        color: NEON.orange,
+      });
+    }
+  }
+
+  return {
+    id: 'bld-shyam-park-d14',
+    name: buildingName,
+    districtName,
+    village,
+    x: bx,
+    z: bz,
+    width: bWidth,
+    depth: bDepth,
+    totalFloors,
+    totalUnits: units.length,
+    units,
+    color: NEON.orange,
+    blockchainLocked: true,
+    hasFraud: false,
+    status: 'validated',
+  };
+}
+
 // ── Generate Complete City with Subdivided Floors & Rooms ─────────────────────
 export function generateSubdividedCity(): CityBuildingComposite[] {
   const rng = mkRng(108);
-  const buildings: CityBuildingComposite[] = [];
+  const buildings: CityBuildingComposite[] = [
+    createBharatCityTowerA2(),
+    createShyamParkD14(),
+  ];
   let parcelCounter = 200;
 
   // Grid step across city coordinates
